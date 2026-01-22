@@ -1,0 +1,155 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Run tests
+        run: go test -v ./...
+
+  build:
+    name: Build Binaries
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            output: bakasub-linux-amd64
+          - goos: windows
+            goarch: amd64
+            output: bakasub-windows-amd64.exe
+          - goos: darwin
+            goarch: amd64
+            output: bakasub-darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            output: bakasub-darwin-arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -v \
+            -ldflags="-s -w -X github.com/lsilvatti/bakasub/pkg/utils.Version=${{ steps.version.outputs.VERSION }}" \
+            -o bin/${{ matrix.output }} \
+            ./cmd/bakasub
+
+      - name: Create checksums
+        run: |
+          cd bin
+          sha256sum ${{ matrix.output }} > ${{ matrix.output }}.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.output }}
+          path: |
+            bin/${{ matrix.output }}
+            bin/${{ matrix.output }}.sha256
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -lh release/
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          PREV_TAG=$(git describe --tags --abbrev=0 ${VERSION}^ 2>/dev/null || echo "")
+          
+          echo "# 🎉 BakaSub ${VERSION}" > notes.md
+          echo "" >> notes.md
+          echo "## 📦 Downloads" >> notes.md
+          echo "" >> notes.md
+          echo "Choose the binary for your platform:" >> notes.md
+          echo "" >> notes.md
+          echo "- **Linux (AMD64):** \`bakasub-linux-amd64\`" >> notes.md
+          echo "- **Windows (AMD64):** \`bakasub-windows-amd64.exe\`" >> notes.md
+          echo "- **macOS (Intel):** \`bakasub-darwin-amd64\`" >> notes.md
+          echo "- **macOS (Apple Silicon):** \`bakasub-darwin-arm64\`" >> notes.md
+          echo "" >> notes.md
+          echo "## 🔐 Verification" >> notes.md
+          echo "" >> notes.md
+          echo "Verify downloads using SHA256 checksums (*.sha256 files)" >> notes.md
+          echo "" >> notes.md
+          
+          if [ -n "$PREV_TAG" ]; then
+            echo "## 📝 Changes since ${PREV_TAG}" >> notes.md
+            echo "" >> notes.md
+            git log ${PREV_TAG}..${VERSION} --pretty=format:"- %s (%h)" >> notes.md
+          else
+            echo "## 📝 Initial Release" >> notes.md
+            echo "" >> notes.md
+            echo "First stable release of BakaSub!" >> notes.md
+          fi
+          
+          cat notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          body_path: notes.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish release announcement
+        run: |
+          echo "🎉 Release published successfully!"
+          echo "Version: ${GITHUB_REF#refs/tags/}"
+          echo "Download: https://github.com/${{ github.repository }}/releases/latest"

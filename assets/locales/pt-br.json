@@ -1,0 +1,308 @@
+{
+  "app": {
+    "name": "BakaSub",
+    "tagline": "Motor de Tradução de Legendas",
+    "version": "v1.0.0"
+  },
+  "common": {
+    "quit": "SAIR",
+    "cancel": "CANCELAR",
+    "back": "VOLTAR",
+    "next": "PRÓXIMO",
+    "next_step": "PRÓXIMA ETAPA",
+    "save": "SALVAR",
+    "confirm": "CONFIRMAR",
+    "continue": "CONTINUAR",
+    "finish": "FINALIZAR",
+    "close": "FECHAR",
+    "ok": "OK",
+    "yes": "SIM",
+    "no": "NÃO",
+    "loading": "Carregando...",
+    "please_wait": "Por favor aguarde...",
+    "error": "Erro",
+    "warning": "Aviso",
+    "success": "Sucesso",
+    "info": "Info"
+  },
+  "wizard": {
+    "title": "ASSISTENTE DE CONFIGURAÇÃO BAKASUB",
+    "step_indicator": "PASSO %d/%d",
+    "step1": {
+      "title": "PROVEDOR DE IA",
+      "subtitle": "Selecione um",
+      "provider_openrouter": "OpenRouter (Recomendado - Acesso a todos os modelos)",
+      "provider_gemini": "API Google Gemini (Nativo)",
+      "provider_openai": "API OpenAI (Nativo)",
+      "provider_local": "LLM Local (Ollama/LMStudio - Requer GPU)",
+      "credentials_title": "CREDENCIAIS",
+      "api_key_label": "CHAVE API",
+      "api_key_placeholder": "Digite sua chave API",
+      "api_key_help": "*Digite a chave completa fornecida pelo serviço selecionado.",
+      "validating": "VALIDANDO CHAVE...",
+      "validation_ok": "OK",
+      "validation_failed": "INVÁLIDA",
+      "interface_language": "IDIOMA DA INTERFACE",
+      "lang_english": "INGLÊS (Padrão)",
+      "lang_portuguese": "PORTUGUÊS (Brasil)",
+      "lang_spanish": "ESPANHOL",
+      "deps_title": "2. VERIFICAÇÃO DO SISTEMA",
+      "deps_subtitle": "Garantindo que as ferramentas externas (FFmpeg/MKVToolNix) estão disponíveis.",
+      "scanning": "VERIFICANDO...",
+      "status": "STATUS",
+      "found": "ENCONTRADO",
+      "not_found": "NÃO ENCONTRADO",
+      "location": "LOCALIZAÇÃO",
+      "system_path": "PATH do Sistema",
+      "action_required": "AÇÃO NECESSÁRIA",
+      "install_manually": "Por favor, instale %s manualmente.",
+      "download": "DOWNLOAD",
+      "checking": "VERIFICANDO",
+      "recheck": "VERIFICAR NOVAMENTE",
+      "skip": "PULAR"
+    },
+    "step2": {
+      "title": "PROVEDOR DE IA",
+      "show": "MOSTRAR",
+      "hide": "OCULTAR",
+      "editing": "EDITANDO",
+      "start_editing": "Iniciar edição",
+      "stop_editing": "Parar edição",
+      "endpoint_title": "ENDPOINT",
+      "endpoint_label": "ENDPOINT",
+      "model_selection_title": "SELEÇÃO DE MODELO",
+      "model_selection_hint": "Configure a chave API para carregar modelos",
+      "loading_models": "Carregando modelos",
+      "model_more": "... e mais %d"
+    },
+    "step3": {
+      "title": "PADRÕES PRINCIPAIS",
+      "model_title": "MODELO DE IA PADRÃO",
+      "model_subtitle": "Lista dinâmica baseada no Provedor",
+      "tab_recommended": "RECOMENDADOS",
+      "tab_free": "GRÁTIS",
+      "tab_search": "BUSCAR",
+      "target_title": "1. IDIOMA DE TRADUÇÃO (Idioma de Saída)",
+      "other": "OUTRO",
+      "custom_iso": "Código ISO Personalizado",
+      "iso_code": "CÓDIGO ISO",
+      "target_other": "OUTRO CÓDIGO ISO:",
+      "target_other_help": "(ex: 'it', 'ru', 'zh-cn')",
+      "preferences_title": "2. PREFERÊNCIAS",
+      "remove_hi_tags": "REMOVER TAGS DE DEFICIENTES AUDITIVOS",
+      "toggle": "alternar",
+      "temperature": "TEMPERATURA GLOBAL",
+      "adjust": "ajustar",
+      "temp_helper": "AJUDA: O QUE É TEMPERATURA?",
+      "next_section": "PRÓXIMA SEÇÃO",
+      "global_temp": "TEMPERATURA GLOBAL:",
+      "temp_help_title": "[?] AJUDA: O QUE É TEMPERATURA?",
+      "temp_help_definition": "• Definição: Controla a \"criatividade\" e aleatoriedade da IA.",
+      "temp_help_low": "• Baixa (0.0 - 0.2): Precisa, literal. Melhor para Docs/Técnico.",
+      "temp_help_mid": "• Média (0.3 - 0.5): Equilibrada. Boa para Séries Gerais.",
+      "temp_help_high": "• Alta (0.6 - 1.0): Criativa, diversa. Melhor para Anime/Drama/Gíria."
+    }
+  },
+  "dashboard": {
+    "status": {
+      "app_running": "APP EXECUTANDO",
+      "api_online": "API: ONLINE",
+      "cache_ok": "CACHE: OK",
+      "update_available": "ATUALIZAÇÃO DISPONÍVEL"
+    },
+    "input": {
+      "title": "ENTRADA E MODO",
+      "path_label": "CAMINHO",
+      "mode_full": "PROCESSO COMPLETO (Extrair -> Traduzir -> Muxar)",
+      "mode_full_help": "*Abre a tela \"Configuração de Job\" para processamento ininterrupto.",
+      "mode_watch": "MODO OBSERVAÇÃO (Auto-processar novos arquivos na pasta)"
+    },
+    "modules": {
+      "title": "MÓDULOS (Independentes)",
+      "extract": "EXTRAIR TRILHAS",
+      "translate": "TRADUZIR LEGENDA",
+      "mux": "MUXAR CONTAINER",
+      "review": "REVISÃO MANUAL (Editor)"
+    },
+    "toolbox": {
+      "title": "FERRAMENTAS (MKVToolNix)",
+      "edit_flags": "EDITAR FLAGS / METADADOS",
+      "manage_attachments": "GERENCIAR ANEXOS",
+      "track_manager": "ADICIONAR/REMOVER TRILHAS",
+      "glossary": "GLOSSÁRIO DO PROJETO"
+    },
+    "system": {
+      "title": "SISTEMA E IA",
+      "model": "MODELO:",
+      "target": "DESTINO:",
+      "temp": "TEMP:",
+      "change_model": "ALTERAR MODELO",
+      "configuration": "CONFIGURAÇÃO"
+    },
+    "footer": {
+      "kofi": "KO-FI",
+      "deps": "DEPS:",
+      "ffmpeg_ok": "FFmpeg [OK]",
+      "mkvtoolnix_ok": "MKVToolNix [OK]",
+      "quit": "SAIR"
+    }
+  },
+  "job": {
+    "title": "CONFIGURAÇÃO DE JOB",
+    "batch_label": "Lote: %d Arquivos",
+    "extraction": {
+      "title": "ESTRATÉGIA DE EXTRAÇÃO",
+      "subtitle_source": "FONTE DA LEGENDA:",
+      "audio_reference": "REFERÊNCIA DE ÁUDIO:",
+      "extract_fonts": "Extrair Fontes (Anexos)",
+      "auto_detect": "AUTO-DETECTAR",
+      "multiple_tracks_warning": "MÚLTIPLAS TRILHAS '%s' ENCONTRADAS",
+      "resolve_button": "RESOLVER",
+      "resolve_help": "*Auto-detecção falhou. Por favor selecione a fonte."
+    },
+    "translation": {
+      "title": "CONTEXTO DA TRADUÇÃO",
+      "media_type": "TIPO DE MÍDIA:",
+      "target_lang": "IDIOMA DESTINO:",
+      "glossary": "GLOSSÁRIO:",
+      "glossary_auto": "Auto-Injetar (Nome da Série)"
+    },
+    "muxing": {
+      "title": "SAÍDA DE MUXING",
+      "mode": "MODO:",
+      "mode_replace": "SUBSTITUIR ORIGINAL (Com backup .old)",
+      "mode_new": "Criar Novo Arquivo",
+      "track_title": "TÍTULO DA TRILHA:",
+      "flags": "FLAGS:",
+      "flag_default": "Definir como Padrão",
+      "flag_forced": "Definir como Forçado"
+    },
+    "estimation": {
+      "title": "ESTIMATIVA DE CUSTO",
+      "model": "Modelo:",
+      "tokens": "Tokens Est.:",
+      "cost": "Custo Est.:"
+    },
+    "footer": {
+      "back": "VOLTAR",
+      "simulation": "SIMULAÇÃO (DRY RUN)",
+      "start": "INICIAR JOB",
+      "start_disabled": "INÍCIO DESABILITADO - RESOLVER CONFLITOS"
+    }
+  },
+  "execution": {
+    "title": "JOB EXECUTANDO:",
+    "status": {
+      "running": "▶ EXECUTANDO",
+      "paused": "⏸ PAUSADO",
+      "cancelling": "⏹ CANCELANDO...",
+      "complete": "✓ COMPLETO",
+      "failed": "✗ FALHOU"
+    },
+    "eta_label": "TEMPO EST.:",
+    "file_label": "ARQUIVO:",
+    "batch_label": "LOTE:",
+    "stats": {
+      "lines": "LINHAS:",
+      "tokens": "TOKENS:",
+      "cost": "CUSTO:",
+      "errors": "ERROS:"
+    },
+    "tape": {
+      "title": "🎞️  VISUALIZAÇÃO DE TRADUÇÃO AO VIVO",
+      "pair_count": "%d pares",
+      "waiting": "⏳ Aguardando pares de tradução..."
+    },
+    "logs": {
+      "title": "LOGS DE EXECUÇÃO",
+      "count": "%d/%d linhas",
+      "scroll_mode": "[MODO ROLAGEM - Pressione G para ir ao final]"
+    },
+    "controls": {
+      "pause": "PAUSAR",
+      "resume": "RETOMAR",
+      "cancel": "CANCELAR",
+      "scroll": "ROLAR",
+      "bottom": "FINAL",
+      "quit": "SAIR"
+    }
+  },
+  "settings": {
+    "title": "CONFIGURAÇÃO",
+    "tabs": {
+      "general": "GERAL",
+      "providers": "PROVEDORES DE IA",
+      "models": "MODELOS DE IA",
+      "prompts": "PROMPTS"
+    },
+    "general": {
+      "ui_language": "IDIOMA DA INTERFACE (UI)",
+      "target_lang": "IDIOMA DESTINO PADRÃO:",
+      "other_label": "OUTRO:",
+      "automation_title": "COMPORTAMENTO DE AUTOMAÇÃO",
+      "touchless_mode": "MODO SEM TOQUE (Iniciar jobs automaticamente)",
+      "touchless_warning": "*Aviso: Pula todas as telas de confirmação.",
+      "configure_rules": "CONFIGURAR REGRAS",
+      "remove_hi_tags": "REMOVER TAGS DE DEFICIENTES AUDITIVOS",
+      "remove_hi_help": "(ex: [Música], (Suspiro))",
+      "auto_update": "AUTO-VERIFICAR ATUALIZAÇÕES (API GitHub)"
+    },
+    "providers": {
+      "active_provider": "PROVEDOR ATIVO",
+      "select_service": "SELECIONAR SERVIÇO:",
+      "api_key": "CHAVE API:",
+      "balance": "SALDO:",
+      "status": "STATUS:",
+      "connected": "CONECTADO",
+      "disconnected": "DESCONECTADO"
+    },
+    "models": {
+      "selection_title": "SELEÇÃO DE MODELO",
+      "search_label": "BUSCAR",
+      "columns": {
+        "name": "NOME",
+        "cost": "CUSTO(1M)",
+        "context": "CTX",
+        "tags": "TAGS"
+      },
+      "found": "Encontrados %d modelos",
+      "global_params": "PARÂMETROS GLOBAIS",
+      "selected": "Selecionado:",
+      "temperature": "Temperatura Global:"
+    },
+    "prompts": {
+      "profile_manager": "GERENCIADOR DE PERFIS",
+      "select_profile": "SELECIONAR PERFIL:",
+      "status_locked": "[BLOQUEADO] Não pode ser modificado. Clone para personalizar.",
+      "preview_title": "VISUALIZAÇÃO DO PROMPT DO SISTEMA (SOMENTE LEITURA)",
+      "overrides_title": "SOBRESCRIÇÕES",
+      "create_new": "CRIAR NOVO",
+      "clone_to_edit": "CLONAR PARA EDITAR"
+    },
+    "footer": {
+      "save_exit": "SALVAR E SAIR",
+      "cancel": "CANCELAR"
+    }
+  },
+  "errors": {
+    "terminal_too_small": "TERMINAL MUITO PEQUENO",
+    "terminal_too_small_message": "Por favor redimensione seu terminal para pelo menos %dx%d",
+    "terminal_current_size": "Tamanho atual: %dx%d",
+    "bsod_title": "ERRO CRÍTICO DO SISTEMA",
+    "bsod_crashed": "A aplicação travou.",
+    "bsod_log_saved": "Um log foi salvo.",
+    "bsod_open_issue": "ABRIR ISSUE NO GITHUB",
+    "bsod_exit": "SAIR DO APP"
+  },
+  "languages": {
+    "en": "Inglês",
+    "pt-br": "Português (Brasil)",
+    "es": "Espanhol",
+    "ja": "Japonês",
+    "fr": "Francês",
+    "de": "Alemão",
+    "it": "Italiano",
+    "ru": "Russo",
+    "zh-cn": "Chinês (Simplificado)"
+  }
+}

@@ -1,0 +1,308 @@
+{
+  "app": {
+    "name": "BakaSub",
+    "tagline": "Motor de Traducción de Subtítulos",
+    "version": "v1.0.0"
+  },
+  "common": {
+    "quit": "SALIR",
+    "cancel": "CANCELAR",
+    "back": "ATRÁS",
+    "next": "SIGUIENTE",
+    "next_step": "SIGUIENTE PASO",
+    "save": "GUARDAR",
+    "confirm": "CONFIRMAR",
+    "continue": "CONTINUAR",
+    "finish": "FINALIZAR",
+    "close": "CERRAR",
+    "ok": "OK",
+    "yes": "SÍ",
+    "no": "NO",
+    "loading": "Cargando...",
+    "please_wait": "Por favor espere...",
+    "error": "Error",
+    "warning": "Advertencia",
+    "success": "Éxito",
+    "info": "Info"
+  },
+  "wizard": {
+    "title": "ASISTENTE DE CONFIGURACIÓN BAKASUB",
+    "step_indicator": "PASO %d/%d",
+    "step1": {
+      "title": "PROVEEDOR DE IA",
+      "subtitle": "Seleccione uno",
+      "provider_openrouter": "OpenRouter (Recomendado - Acceso a todos los modelos)",
+      "provider_gemini": "API Google Gemini (Nativo)",
+      "provider_openai": "API OpenAI (Nativo)",
+      "provider_local": "LLM Local (Ollama/LMStudio - Requiere GPU)",
+      "credentials_title": "CREDENCIALES",
+      "api_key_label": "CLAVE API",
+      "api_key_placeholder": "Ingrese su clave API",
+      "api_key_help": "*Ingrese la clave completa proporcionada por el servicio seleccionado.",
+      "validating": "VALIDANDO CLAVE...",
+      "validation_ok": "OK",
+      "validation_failed": "INVÁLIDA",
+      "interface_language": "IDIOMA DE LA INTERFAZ",
+      "lang_english": "INGLÉS (Predeterminado)",
+      "lang_portuguese": "PORTUGUÉS (Brasil)",
+      "lang_spanish": "ESPAÑOL",
+      "deps_title": "2. VERIFICACIÓN DEL SISTEMA",
+      "deps_subtitle": "Asegurando que las herramientas externas (FFmpeg/MKVToolNix) estén disponibles.",
+      "scanning": "ESCANEANDO...",
+      "status": "ESTADO",
+      "found": "ENCONTRADO",
+      "not_found": "NO ENCONTRADO",
+      "location": "UBICACIÓN",
+      "system_path": "PATH del Sistema",
+      "action_required": "ACCIÓN REQUERIDA",
+      "install_manually": "Por favor, instale %s manualmente.",
+      "download": "DESCARGAR",
+      "checking": "VERIFICANDO",
+      "recheck": "VERIFICAR DE NUEVO",
+      "skip": "OMITIR"
+    },
+    "step2": {
+      "title": "PROVEEDOR DE IA",
+      "show": "MOSTRAR",
+      "hide": "OCULTAR",
+      "editing": "EDITANDO",
+      "start_editing": "Iniciar edición",
+      "stop_editing": "Detener edición",
+      "endpoint_title": "ENDPOINT",
+      "endpoint_label": "ENDPOINT",
+      "model_selection_title": "SELECCIÓN DE MODELO",
+      "model_selection_hint": "Configure la clave API para cargar modelos",
+      "loading_models": "Cargando modelos",
+      "model_more": "... y %d más"
+    },
+    "step3": {
+      "title": "VALORES PREDETERMINADOS",
+      "model_title": "MODELO DE IA PREDETERMINADO",
+      "model_subtitle": "Lista dinámica basada en el Proveedor",
+      "tab_recommended": "RECOMENDADOS",
+      "tab_free": "GRATIS",
+      "tab_search": "BUSCAR",
+      "target_title": "1. IDIOMA DE TRADUCCIÓN (Idioma de Salida)",
+      "other": "OTRO",
+      "custom_iso": "Código ISO Personalizado",
+      "iso_code": "CÓDIGO ISO",
+      "target_other": "OTRO CÓDIGO ISO:",
+      "target_other_help": "(ej: 'it', 'ru', 'zh-cn')",
+      "preferences_title": "2. PREFERENCIAS",
+      "remove_hi_tags": "ELIMINAR ETIQUETAS DE DISCAPACITADOS AUDITIVOS",
+      "toggle": "alternar",
+      "temperature": "TEMPERATURA GLOBAL",
+      "adjust": "ajustar",
+      "temp_helper": "AYUDA: ¿QUÉ ES LA TEMPERATURA?",
+      "next_section": "SIGUIENTE SECCIÓN",
+      "global_temp": "TEMPERATURA GLOBAL:",
+      "temp_help_title": "[?] AYUDA: ¿QUÉ ES LA TEMPERATURA?",
+      "temp_help_definition": "• Definición: Controla la \"creatividad\" y aleatoriedad de la IA.",
+      "temp_help_low": "• Baja (0.0 - 0.2): Precisa, literal. Mejor para Docs/Técnico.",
+      "temp_help_mid": "• Media (0.3 - 0.5): Equilibrada. Buena para Series Generales.",
+      "temp_help_high": "• Alta (0.6 - 1.0): Creativa, diversa. Mejor para Anime/Drama/Jerga."
+    }
+  },
+  "dashboard": {
+    "status": {
+      "app_running": "APP EJECUTÁNDOSE",
+      "api_online": "API: EN LÍNEA",
+      "cache_ok": "CACHÉ: OK",
+      "update_available": "ACTUALIZACIÓN DISPONIBLE"
+    },
+    "input": {
+      "title": "ENTRADA Y MODO",
+      "path_label": "RUTA",
+      "mode_full": "PROCESO COMPLETO (Extraer -> Traducir -> Muxear)",
+      "mode_full_help": "*Abre la pantalla \"Configuración de Trabajo\" para procesamiento ininterrumpido.",
+      "mode_watch": "MODO VIGILANCIA (Auto-procesar nuevos archivos en carpeta)"
+    },
+    "modules": {
+      "title": "MÓDULOS (Independientes)",
+      "extract": "EXTRAER PISTAS",
+      "translate": "TRADUCIR SUBTÍTULO",
+      "mux": "MUXEAR CONTENEDOR",
+      "review": "REVISIÓN MANUAL (Editor)"
+    },
+    "toolbox": {
+      "title": "HERRAMIENTAS (MKVToolNix)",
+      "edit_flags": "EDITAR FLAGS / METADATOS",
+      "manage_attachments": "ADMINISTRAR ADJUNTOS",
+      "track_manager": "AGREGAR/ELIMINAR PISTAS",
+      "glossary": "GLOSARIO DEL PROYECTO"
+    },
+    "system": {
+      "title": "SISTEMA E IA",
+      "model": "MODELO:",
+      "target": "DESTINO:",
+      "temp": "TEMP:",
+      "change_model": "CAMBIAR MODELO",
+      "configuration": "CONFIGURACIÓN"
+    },
+    "footer": {
+      "kofi": "KO-FI",
+      "deps": "DEPS:",
+      "ffmpeg_ok": "FFmpeg [OK]",
+      "mkvtoolnix_ok": "MKVToolNix [OK]",
+      "quit": "SALIR"
+    }
+  },
+  "job": {
+    "title": "CONFIGURACIÓN DE TRABAJO",
+    "batch_label": "Lote: %d Archivos",
+    "extraction": {
+      "title": "ESTRATEGIA DE EXTRACCIÓN",
+      "subtitle_source": "FUENTE DE SUBTÍTULO:",
+      "audio_reference": "REFERENCIA DE AUDIO:",
+      "extract_fonts": "Extraer Fuentes (Adjuntos)",
+      "auto_detect": "AUTO-DETECTAR",
+      "multiple_tracks_warning": "MÚLTIPLES PISTAS '%s' ENCONTRADAS",
+      "resolve_button": "RESOLVER",
+      "resolve_help": "*Auto-detección falló. Por favor seleccione la fuente."
+    },
+    "translation": {
+      "title": "CONTEXTO DE TRADUCCIÓN",
+      "media_type": "TIPO DE MEDIO:",
+      "target_lang": "IDIOMA DESTINO:",
+      "glossary": "GLOSARIO:",
+      "glossary_auto": "Auto-Inyectar (Nombre de la Serie)"
+    },
+    "muxing": {
+      "title": "SALIDA DE MUXEO",
+      "mode": "MODO:",
+      "mode_replace": "REEMPLAZAR ORIGINAL (Con respaldo .old)",
+      "mode_new": "Crear Nuevo Archivo",
+      "track_title": "TÍTULO DE LA PISTA:",
+      "flags": "FLAGS:",
+      "flag_default": "Establecer como Predeterminado",
+      "flag_forced": "Establecer como Forzado"
+    },
+    "estimation": {
+      "title": "ESTIMACIÓN DE COSTO",
+      "model": "Modelo:",
+      "tokens": "Tokens Est.:",
+      "cost": "Costo Est.:"
+    },
+    "footer": {
+      "back": "ATRÁS",
+      "simulation": "SIMULACIÓN (DRY RUN)",
+      "start": "INICIAR TRABAJO",
+      "start_disabled": "INICIO DESHABILITADO - RESOLVER CONFLICTOS"
+    }
+  },
+  "execution": {
+    "title": "TRABAJO EJECUTÁNDOSE:",
+    "status": {
+      "running": "▶ EJECUTÁNDOSE",
+      "paused": "⏸ PAUSADO",
+      "cancelling": "⏹ CANCELANDO...",
+      "complete": "✓ COMPLETO",
+      "failed": "✗ FALLÓ"
+    },
+    "eta_label": "TIEMPO EST.:",
+    "file_label": "ARCHIVO:",
+    "batch_label": "LOTE:",
+    "stats": {
+      "lines": "LÍNEAS:",
+      "tokens": "TOKENS:",
+      "cost": "COSTO:",
+      "errors": "ERRORES:"
+    },
+    "tape": {
+      "title": "🎞️  VISTA DE TRADUCCIÓN EN VIVO",
+      "pair_count": "%d pares",
+      "waiting": "⏳ Esperando pares de traducción..."
+    },
+    "logs": {
+      "title": "REGISTROS DE EJECUCIÓN",
+      "count": "%d/%d líneas",
+      "scroll_mode": "[MODO DESPLAZAMIENTO - Presione G para ir al final]"
+    },
+    "controls": {
+      "pause": "PAUSAR",
+      "resume": "REANUDAR",
+      "cancel": "CANCELAR",
+      "scroll": "DESPLAZAR",
+      "bottom": "FINAL",
+      "quit": "SALIR"
+    }
+  },
+  "settings": {
+    "title": "CONFIGURACIÓN",
+    "tabs": {
+      "general": "GENERAL",
+      "providers": "PROVEEDORES DE IA",
+      "models": "MODELOS DE IA",
+      "prompts": "PROMPTS"
+    },
+    "general": {
+      "ui_language": "IDIOMA DE LA INTERFAZ (UI)",
+      "target_lang": "IDIOMA DESTINO PREDETERMINADO:",
+      "other_label": "OTRO:",
+      "automation_title": "COMPORTAMIENTO DE AUTOMATIZACIÓN",
+      "touchless_mode": "MODO SIN CONTACTO (Iniciar trabajos automáticamente)",
+      "touchless_warning": "*Advertencia: Omite todas las pantallas de confirmación.",
+      "configure_rules": "CONFIGURAR REGLAS",
+      "remove_hi_tags": "ELIMINAR ETIQUETAS DE DISCAPACITADOS AUDITIVOS",
+      "remove_hi_help": "(ej: [Música], (Suspiro))",
+      "auto_update": "AUTO-VERIFICAR ACTUALIZACIONES (API GitHub)"
+    },
+    "providers": {
+      "active_provider": "PROVEEDOR ACTIVO",
+      "select_service": "SELECCIONAR SERVICIO:",
+      "api_key": "CLAVE API:",
+      "balance": "SALDO:",
+      "status": "ESTADO:",
+      "connected": "CONECTADO",
+      "disconnected": "DESCONECTADO"
+    },
+    "models": {
+      "selection_title": "SELECCIÓN DE MODELO",
+      "search_label": "BUSCAR",
+      "columns": {
+        "name": "NOMBRE",
+        "cost": "COSTO(1M)",
+        "context": "CTX",
+        "tags": "ETIQUETAS"
+      },
+      "found": "Se encontraron %d modelos",
+      "global_params": "PARÁMETROS GLOBALES",
+      "selected": "Seleccionado:",
+      "temperature": "Temperatura Global:"
+    },
+    "prompts": {
+      "profile_manager": "ADMINISTRADOR DE PERFILES",
+      "select_profile": "SELECCIONAR PERFIL:",
+      "status_locked": "[BLOQUEADO] No se puede modificar. Clonar para personalizar.",
+      "preview_title": "VISTA PREVIA DEL PROMPT DEL SISTEMA (SOLO LECTURA)",
+      "overrides_title": "SOBRESCRITURAS",
+      "create_new": "CREAR NUEVO",
+      "clone_to_edit": "CLONAR PARA EDITAR"
+    },
+    "footer": {
+      "save_exit": "GUARDAR Y SALIR",
+      "cancel": "CANCELAR"
+    }
+  },
+  "errors": {
+    "terminal_too_small": "TERMINAL DEMASIADO PEQUEÑA",
+    "terminal_too_small_message": "Por favor redimensione su terminal a al menos %dx%d",
+    "terminal_current_size": "Tamaño actual: %dx%d",
+    "bsod_title": "ERROR CRÍTICO DEL SISTEMA",
+    "bsod_crashed": "La aplicación se ha bloqueado.",
+    "bsod_log_saved": "Se ha guardado un registro.",
+    "bsod_open_issue": "ABRIR ISSUE EN GITHUB",
+    "bsod_exit": "SALIR DE LA APP"
+  },
+  "languages": {
+    "en": "Inglés",
+    "pt-br": "Portugués (Brasil)",
+    "es": "Español",
+    "ja": "Japonés",
+    "fr": "Francés",
+    "de": "Alemán",
+    "it": "Italiano",
+    "ru": "Ruso",
+    "zh-cn": "Chino (Simplificado)"
+  }
+}

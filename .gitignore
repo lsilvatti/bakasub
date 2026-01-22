@@ -1,0 +1,47 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bakasub
+bakasub.exe
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Dependency directories
+vendor/
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Application specific
+config.json
+bakasub.db
+*.old
+.bakasub.temp
+*.mkv
+*.ass
+*.srt
+*.log
+
+# Build artifacts
+dist/
+release/

@@ -1,0 +1,308 @@
+{
+  "app": {
+    "name": "BakaSub",
+    "tagline": "Subtitle Translation Engine",
+    "version": "v1.0.0"
+  },
+  "common": {
+    "quit": "QUIT",
+    "cancel": "CANCEL",
+    "back": "BACK",
+    "next": "NEXT",
+    "next_step": "NEXT STEP",
+    "save": "SAVE",
+    "confirm": "CONFIRM",
+    "continue": "CONTINUE",
+    "finish": "FINISH",
+    "close": "CLOSE",
+    "ok": "OK",
+    "yes": "YES",
+    "no": "NO",
+    "loading": "Loading...",
+    "please_wait": "Please wait...",
+    "error": "Error",
+    "warning": "Warning",
+    "success": "Success",
+    "info": "Info"
+  },
+  "wizard": {
+    "title": "BAKASUB SETUP WIZARD",
+    "step_indicator": "STEP %d/%d",
+    "step1": {
+      "title": "AI PROVIDER",
+      "subtitle": "Select One",
+      "provider_openrouter": "OpenRouter (Recommended - Access to all models)",
+      "provider_gemini": "Google Gemini API (Native)",
+      "provider_openai": "OpenAI API (Native)",
+      "provider_local": "Local LLM (Ollama/LMStudio - Requires GPU)",
+      "credentials_title": "CREDENTIALS",
+      "api_key_label": "API KEY",
+      "api_key_placeholder": "Enter your API key",
+      "api_key_help": "*Enter the full key provided by the selected service.",
+      "validating": "VALIDATING KEY...",
+      "validation_ok": "OK",
+      "validation_failed": "INVALID",
+      "interface_language": "INTERFACE LANGUAGE",
+      "lang_english": "ENGLISH (Default)",
+      "lang_portuguese": "PORTUGUÊS (Brasil)",
+      "lang_spanish": "ESPAÑOL",
+      "deps_title": "2. SYSTEM CHECK",
+      "deps_subtitle": "Ensuring external tools (FFmpeg/MKVToolNix) are available.",
+      "scanning": "SCANNING...",
+      "status": "STATUS",
+      "found": "FOUND",
+      "not_found": "NOT FOUND",
+      "location": "LOCATION",
+      "system_path": "System PATH",
+      "action_required": "ACTION REQUIRED",
+      "install_manually": "Please install %s manually.",
+      "download": "DOWNLOAD",
+      "checking": "CHECKING",
+      "recheck": "RECHECK",
+      "skip": "SKIP"
+    },
+    "step2": {
+      "title": "AI PROVIDER",
+      "show": "SHOW",
+      "hide": "HIDE",
+      "editing": "EDITING",
+      "start_editing": "Start editing",
+      "stop_editing": "Stop editing",
+      "endpoint_title": "ENDPOINT",
+      "endpoint_label": "ENDPOINT",
+      "model_selection_title": "MODEL SELECTION",
+      "model_selection_hint": "Configure API key to load models",
+      "loading_models": "Loading models",
+      "model_more": "... and %d more"
+    },
+    "step3": {
+      "title": "CORE DEFAULTS",
+      "model_title": "DEFAULT AI MODEL",
+      "model_subtitle": "Dynamic List based on Provider",
+      "tab_recommended": "RECOMMENDED",
+      "tab_free": "FREE",
+      "tab_search": "SEARCH",
+      "target_title": "1. TRANSLATION TARGET (Output Language)",
+      "other": "OTHER",
+      "custom_iso": "Custom ISO Code",
+      "iso_code": "ISO CODE",
+      "target_other": "OTHER ISO CODE:",
+      "target_other_help": "(e.g. 'it', 'ru', 'zh-cn')",
+      "preferences_title": "2. PREFERENCES",
+      "remove_hi_tags": "REMOVE HEARING IMPAIRED TAGS",
+      "toggle": "toggle",
+      "temperature": "GLOBAL TEMPERATURE",
+      "adjust": "adjust",
+      "temp_helper": "HELPER: WHAT IS TEMPERATURE?",
+      "next_section": "NEXT SECTION",
+      "global_temp": "GLOBAL TEMPERATURE:",
+      "temp_help_title": "[?] HELPER: WHAT IS TEMPERATURE?",
+      "temp_help_definition": "• Definition: Controls the \"creativity\" and randomness of the AI.",
+      "temp_help_low": "• Low (0.0 - 0.2): Precise, literal. Best for Docs/Technical.",
+      "temp_help_mid": "• Mid (0.3 - 0.5): Balanced. Good for General Series.",
+      "temp_help_high": "• High (0.6 - 1.0): Creative, diverse. Best for Anime/Drama/Slang."
+    }
+  },
+  "dashboard": {
+    "status": {
+      "app_running": "APP RUNNING",
+      "api_online": "API: ONLINE",
+      "cache_ok": "CACHE: OK",
+      "update_available": "UPDATE AVAILABLE"
+    },
+    "input": {
+      "title": "INPUT & MODE",
+      "path_label": "PATH",
+      "mode_full": "FULL PROCESS (Extract -> Translate -> Mux)",
+      "mode_full_help": "*Opens \"Job Setup\" screen for uninterrupted processing.",
+      "mode_watch": "WATCH MODE (Auto-process new files in folder)"
+    },
+    "modules": {
+      "title": "MODULES (Standalone)",
+      "extract": "EXTRACT TRACKS",
+      "translate": "TRANSLATE SUBTITLE",
+      "mux": "MUX CONTAINER",
+      "review": "MANUAL REVIEW (Editor)"
+    },
+    "toolbox": {
+      "title": "TOOLBOX (MKVToolNix)",
+      "edit_flags": "EDIT FLAGS / METADATA",
+      "manage_attachments": "MANAGE ATTACHMENTS",
+      "track_manager": "ADD/REMOVE TRACKS",
+      "glossary": "PROJECT GLOSSARY"
+    },
+    "system": {
+      "title": "SYSTEM & AI",
+      "model": "MODEL:",
+      "target": "TARGET:",
+      "temp": "TEMP:",
+      "change_model": "CHANGE MODEL",
+      "configuration": "CONFIGURATION"
+    },
+    "footer": {
+      "kofi": "KO-FI",
+      "deps": "DEPS:",
+      "ffmpeg_ok": "FFmpeg [OK]",
+      "mkvtoolnix_ok": "MKVToolNix [OK]",
+      "quit": "QUIT"
+    }
+  },
+  "job": {
+    "title": "JOB SETUP",
+    "batch_label": "Batch: %d Files",
+    "extraction": {
+      "title": "EXTRACTION STRATEGY",
+      "subtitle_source": "SUBTITLE SOURCE:",
+      "audio_reference": "AUDIO REFERENCE:",
+      "extract_fonts": "Extract Fonts (Attachments)",
+      "auto_detect": "AUTO-DETECT",
+      "multiple_tracks_warning": "MULTIPLE '%s' TRACKS FOUND",
+      "resolve_button": "RESOLVE",
+      "resolve_help": "*Auto-detect failed. Please select source."
+    },
+    "translation": {
+      "title": "TRANSLATION CONTEXT",
+      "media_type": "MEDIA TYPE:",
+      "target_lang": "TARGET LANG:",
+      "glossary": "GLOSSARY:",
+      "glossary_auto": "Auto-Inject (Series Name)"
+    },
+    "muxing": {
+      "title": "MUXING OUTPUT",
+      "mode": "MODE:",
+      "mode_replace": "REPLACE ORIGINAL (With .old backup)",
+      "mode_new": "Create New File",
+      "track_title": "TRACK TITLE:",
+      "flags": "FLAGS:",
+      "flag_default": "Set Default",
+      "flag_forced": "Set Forced"
+    },
+    "estimation": {
+      "title": "COST ESTIMATION",
+      "model": "Model:",
+      "tokens": "Est. Tokens:",
+      "cost": "Est. Cost:"
+    },
+    "footer": {
+      "back": "BACK",
+      "simulation": "SIMULATION (DRY RUN)",
+      "start": "START JOB",
+      "start_disabled": "START DISABLED - RESOLVE CONFLICTS"
+    }
+  },
+  "execution": {
+    "title": "JOB RUNNING:",
+    "status": {
+      "running": "▶ RUNNING",
+      "paused": "⏸ PAUSED",
+      "cancelling": "⏹ CANCELLING...",
+      "complete": "✓ COMPLETE",
+      "failed": "✗ FAILED"
+    },
+    "eta_label": "ETA:",
+    "file_label": "FILE:",
+    "batch_label": "BATCH:",
+    "stats": {
+      "lines": "LINES:",
+      "tokens": "TOKENS:",
+      "cost": "COST:",
+      "errors": "ERRORS:"
+    },
+    "tape": {
+      "title": "🎞️  LIVE TRANSLATION VIEW",
+      "pair_count": "%d pairs",
+      "waiting": "⏳ Waiting for translation pairs..."
+    },
+    "logs": {
+      "title": "EXECUTION LOGS",
+      "count": "%d/%d lines",
+      "scroll_mode": "[SCROLL MODE - Press G to jump to bottom]"
+    },
+    "controls": {
+      "pause": "PAUSE",
+      "resume": "RESUME",
+      "cancel": "CANCEL",
+      "scroll": "SCROLL",
+      "bottom": "BOTTOM",
+      "quit": "QUIT"
+    }
+  },
+  "settings": {
+    "title": "CONFIGURATION",
+    "tabs": {
+      "general": "GENERAL",
+      "providers": "AI PROVIDERS",
+      "models": "AI MODELS",
+      "prompts": "PROMPTS"
+    },
+    "general": {
+      "ui_language": "INTERFACE LANGUAGE (UI)",
+      "target_lang": "DEFAULT TARGET LANG:",
+      "other_label": "OTHER:",
+      "automation_title": "AUTOMATION BEHAVIOR",
+      "touchless_mode": "TOUCHLESS MODE (Auto-start jobs)",
+      "touchless_warning": "*Warning: Skips all confirmation screens.",
+      "configure_rules": "CONFIGURE RULES",
+      "remove_hi_tags": "REMOVE HEARING IMPAIRED TAGS",
+      "remove_hi_help": "(e.g., [Music], (Sigh))",
+      "auto_update": "AUTO-CHECK FOR UPDATES (GitHub API)"
+    },
+    "providers": {
+      "active_provider": "ACTIVE PROVIDER",
+      "select_service": "SELECT SERVICE:",
+      "api_key": "API KEY:",
+      "balance": "BALANCE:",
+      "status": "STATUS:",
+      "connected": "CONNECTED",
+      "disconnected": "DISCONNECTED"
+    },
+    "models": {
+      "selection_title": "MODEL SELECTION",
+      "search_label": "SEARCH",
+      "columns": {
+        "name": "NAME",
+        "cost": "COST(1M)",
+        "context": "CTX",
+        "tags": "TAGS"
+      },
+      "found": "Found %d models",
+      "global_params": "GLOBAL PARAMETERS",
+      "selected": "Selected:",
+      "temperature": "Global Temperature:"
+    },
+    "prompts": {
+      "profile_manager": "PROFILE MANAGER",
+      "select_profile": "SELECT PROFILE:",
+      "status_locked": "[LOCKED] Cannot be modified. Clone to customize.",
+      "preview_title": "SYSTEM PROMPT PREVIEW (READ ONLY)",
+      "overrides_title": "OVERRIDES",
+      "create_new": "CREATE NEW",
+      "clone_to_edit": "CLONE TO EDIT"
+    },
+    "footer": {
+      "save_exit": "SAVE & EXIT",
+      "cancel": "CANCEL"
+    }
+  },
+  "errors": {
+    "terminal_too_small": "TERMINAL TOO SMALL",
+    "terminal_too_small_message": "Please resize your terminal to at least %dx%d",
+    "terminal_current_size": "Current size: %dx%d",
+    "bsod_title": "CRITICAL SYSTEM ERROR",
+    "bsod_crashed": "The application has crashed.",
+    "bsod_log_saved": "A log has been saved.",
+    "bsod_open_issue": "OPEN GITHUB ISSUE",
+    "bsod_exit": "EXIT APP"
+  },
+  "languages": {
+    "en": "English",
+    "pt-br": "Português (Brasil)",
+    "es": "Español",
+    "ja": "日本語 (Japanese)",
+    "fr": "Français",
+    "de": "Deutsch",
+    "it": "Italiano",
+    "ru": "Русский",
+    "zh-cn": "中文 (简体)"
+  }
+}
