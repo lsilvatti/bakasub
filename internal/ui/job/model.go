@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lsilvatti/bakasub/internal/config"
 	"github.com/lsilvatti/bakasub/internal/core/media"
+	"github.com/lsilvatti/bakasub/internal/locales"
 	"github.com/lsilvatti/bakasub/internal/ui/components"
 	"github.com/lsilvatti/bakasub/internal/ui/layout"
 	"github.com/lsilvatti/bakasub/internal/ui/styles"
@@ -18,11 +19,18 @@ import (
 type ViewState int
 
 const (
-	ViewMain ViewState = iota
+	ViewMain              ViewState = iota
+	ViewDirectoryDetected           // New: Modal asking batch or single file
 	ViewConflictResolution
 	ViewDryRunReport
 	ViewGlossaryEditor
 )
+
+// Available media types for prompt selection
+var mediaTypes = []string{"anime", "movie", "series", "documentary", "youtube"}
+
+// Available mux modes
+var muxModes = []string{"replace", "new-file"}
 
 type Model struct {
 	cfg    *config.Config
@@ -36,6 +44,15 @@ type Model struct {
 	hasConflicts    bool
 	canStart        bool
 	selectedFileIdx int
+
+	// Interactive selection indices
+	mediaTypeIdx int
+	muxModeIdx   int
+
+	// Directory detection state
+	showDirModal   bool
+	dirMKVCount    int
+	dirIsDirectory bool
 
 	conflictModal  *ConflictModal
 	dryRunReport   *DryRunReport
@@ -88,18 +105,43 @@ func New(cfg *config.Config, inputPath string) Model {
 		GlossaryTerms:   make(map[string]string),
 	}
 
+	// Find initial indices for media type and mux mode
+	mediaTypeIdx := 0
+	for i, mt := range mediaTypes {
+		if mt == jobConfig.MediaType {
+			mediaTypeIdx = i
+			break
+		}
+	}
+
+	muxModeIdx := 0
+	for i, mm := range muxModes {
+		if mm == jobConfig.MuxMode {
+			muxModeIdx = i
+			break
+		}
+	}
+
 	return Model{
 		cfg:             cfg,
 		state:           ViewMain,
 		jobConfig:       jobConfig,
 		canStart:        false,
+		mediaTypeIdx:    mediaTypeIdx,
+		muxModeIdx:      muxModeIdx,
 		analysisSpinner: components.NewNeonSpinner(),
 	}
 }
 
+// SetSize updates the model dimensions
+func (m *Model) SetSize(width, height int) {
+	m.width = width
+	m.height = height
+}
+
 func (m Model) Init() tea.Cmd {
-	// Start spinner and analysis together
-	return tea.Batch(m.analyzeDirectory, m.analysisSpinner.Start())
+	// Request terminal size and start spinner and analysis together
+	return tea.Batch(tea.WindowSize(), m.analyzeDirectory, m.analysisSpinner.Start())
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -124,6 +166,51 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 		return m, tea.Batch(cmds...)
+
+	case MsgDirectoryDetected:
+		m.analyzing = false
+		m.analysisSpinner.Stop()
+		m.state = ViewDirectoryDetected
+		m.showDirModal = true
+		m.dirMKVCount = msg.MKVCount
+		m.dirIsDirectory = msg.IsDir
+		return m, nil
+
+	case MsgBatchModeSelected:
+		m.showDirModal = false
+		m.state = ViewMain
+		m.analyzing = true
+
+		// Collect MKV files based on batch mode selection
+		return m, func() tea.Msg {
+			entries, err := os.ReadDir(m.jobConfig.InputPath)
+			if err != nil {
+				return MsgAnalysisComplete{Success: false, Error: err}
+			}
+
+			var mkvFiles []string
+			for _, entry := range entries {
+				if !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".mkv") {
+					mkvFiles = append(mkvFiles, filepath.Join(m.jobConfig.InputPath, entry.Name()))
+				}
+			}
+
+			if msg.BatchMode {
+				// Batch mode: analyze all files
+				m.jobConfig.BatchMode = true
+				return m.analyzeFiles(mkvFiles)
+			}
+			// Single mode: return to caller for file picker
+			return MsgSelectSingleFile{Files: mkvFiles}
+		}
+
+	case MsgSingleFileSelected:
+		m.jobConfig.BatchMode = false
+		m.jobConfig.InputPath = msg.Path
+		m.analyzing = true
+		return m, func() tea.Msg {
+			return m.analyzeFiles([]string{msg.Path})
+		}
 
 	case MsgAnalysisComplete:
 		m.analyzing = false
@@ -169,10 +256,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.estimateCost
 
 	case MsgStartJob:
-		return m, nil
+		// Send the StartJobMsg to parent (dashboard) with the job config
+		return m, func() tea.Msg {
+			return StartJobMsg{JobConfig: m.jobConfig}
+		}
 
 	case MsgCancelJob:
-		return m, nil
+		// Send the CancelledMsg to parent (dashboard)
+		return m, func() tea.Msg {
+			return CancelledMsg{}
+		}
 	}
 
 	return m.updateSubModels(msg)
@@ -180,6 +273,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.state {
+	case ViewDirectoryDetected:
+		switch msg.String() {
+		case "b":
+			// Batch mode: process all files
+			return m, func() tea.Msg {
+				return MsgBatchModeSelected{BatchMode: true}
+			}
+		case "s":
+			// Single file mode: open file picker
+			return m, func() tea.Msg {
+				return MsgBatchModeSelected{BatchMode: false}
+			}
+		case "esc":
+			return m, func() tea.Msg { return MsgCancelJob{} }
+		}
+		return m, nil
+
 	case ViewMain:
 		switch {
 		case key.Matches(msg, keys.Escape):
@@ -209,6 +319,21 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, nil
+		case msg.String() == "m":
+			// Cycle media type
+			m.mediaTypeIdx = (m.mediaTypeIdx + 1) % len(mediaTypes)
+			m.jobConfig.MediaType = mediaTypes[m.mediaTypeIdx]
+			return m, nil
+		case msg.String() == "M":
+			// Cycle media type backwards
+			m.mediaTypeIdx = (m.mediaTypeIdx - 1 + len(mediaTypes)) % len(mediaTypes)
+			m.jobConfig.MediaType = mediaTypes[m.mediaTypeIdx]
+			return m, nil
+		case msg.String() == "x":
+			// Cycle mux mode
+			m.muxModeIdx = (m.muxModeIdx + 1) % len(muxModes)
+			m.jobConfig.MuxMode = muxModes[m.muxModeIdx]
+			return m, nil
 		}
 	case ViewConflictResolution:
 		if m.conflictModal != nil {
@@ -220,6 +345,10 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if key.Matches(msg, keys.Escape) {
 			m.state = ViewMain
 			return m, nil
+		}
+		if key.Matches(msg, keys.Enter) {
+			// Proceed to execution from dry run report
+			return m, func() tea.Msg { return MsgStartJob{} }
 		}
 	case ViewGlossaryEditor:
 		if m.glossaryEditor != nil {
@@ -272,8 +401,6 @@ func (m Model) checkConflicts() bool {
 }
 
 func (m Model) analyzeDirectory() tea.Msg {
-	var files []AnalyzedFile
-
 	info, err := os.Stat(m.jobConfig.InputPath)
 	if err != nil {
 		return MsgAnalysisComplete{Success: false, Error: err}
@@ -291,7 +418,17 @@ func (m Model) analyzeDirectory() tea.Msg {
 				mkvFiles = append(mkvFiles, filepath.Join(m.jobConfig.InputPath, entry.Name()))
 			}
 		}
-		m.jobConfig.BatchMode = len(mkvFiles) > 1
+
+		// If multiple MKV files found, show directory detection modal
+		if len(mkvFiles) > 1 {
+			return MsgDirectoryDetected{
+				Path:     m.jobConfig.InputPath,
+				MKVCount: len(mkvFiles),
+				IsDir:    true,
+			}
+		}
+
+		m.jobConfig.BatchMode = false
 	} else {
 		mkvFiles = []string{m.jobConfig.InputPath}
 		m.jobConfig.BatchMode = false
@@ -300,6 +437,12 @@ func (m Model) analyzeDirectory() tea.Msg {
 	if len(mkvFiles) == 0 {
 		return MsgAnalysisComplete{Success: false, Error: fmt.Errorf("no MKV files found")}
 	}
+
+	return m.analyzeFiles(mkvFiles)
+}
+
+func (m Model) analyzeFiles(mkvFiles []string) tea.Msg {
+	var files []AnalyzedFile
 
 	for _, path := range mkvFiles {
 		analyzed, err := m.analyzeFile(path)
@@ -326,6 +469,7 @@ func (m Model) analyzeFile(path string) (AnalyzedFile, error) {
 		SelectedTrackID: -1,
 	}
 
+	// Collect subtitle tracks
 	var subTracks []media.Track
 	for _, track := range fileInfo.Tracks {
 		if track.Type == "subtitles" {
@@ -333,10 +477,31 @@ func (m Model) analyzeFile(path string) (AnalyzedFile, error) {
 		}
 	}
 
-	analyzed.HasConflict = len(subTracks) > 1
-	analyzed.ConflictTracks = subTracks
+	// Check for conflicts: multiple tracks with the same language code
+	// This happens when there are multiple subtitle options (e.g., "eng" full dialogue + "eng" signs only)
+	langCounts := make(map[string]int)
+	for _, track := range subTracks {
+		langCounts[track.Language]++
+	}
 
+	// Find tracks that conflict (same language, multiple options)
+	var conflictTracks []media.Track
+	for _, track := range subTracks {
+		if langCounts[track.Language] > 1 {
+			conflictTracks = append(conflictTracks, track)
+		}
+	}
+
+	analyzed.HasConflict = len(conflictTracks) > 1
+	analyzed.ConflictTracks = conflictTracks
+
+	// Auto-select if only one subtitle track exists, or no conflicts
 	if len(subTracks) == 1 {
+		analyzed.SelectedTrackID = subTracks[0].ID
+		analyzed.HasConflict = false
+	} else if len(conflictTracks) == 0 && len(subTracks) > 0 {
+		// Multiple tracks but different languages - auto-select first one
+		// Could be improved to select based on source language preference
 		analyzed.SelectedTrackID = subTracks[0].ID
 		analyzed.HasConflict = false
 	}
@@ -418,12 +583,19 @@ func (m Model) runDryRun() tea.Msg {
 }
 
 func (m Model) View() string {
+	// Wait for terminal size
+	if layout.IsWaitingForSize(m.width, m.height) {
+		return locales.T("common.loading")
+	}
+
 	// Check if terminal is too small
 	if layout.IsTooSmall(m.width, m.height) {
 		return layout.RenderTooSmallWarning(m.width, m.height)
 	}
 
 	switch m.state {
+	case ViewDirectoryDetected:
+		return m.renderWithOverlay(m.renderDirectoryModal())
 	case ViewConflictResolution:
 		if m.conflictModal != nil {
 			return m.renderWithOverlay(m.conflictModal.View())
@@ -441,68 +613,178 @@ func (m Model) View() string {
 }
 
 func (m Model) renderMain() string {
+	contentWidth := m.width - 4
+
 	if m.analyzing {
-		// Show spinner while analyzing
-		return styles.AppStyle.Render(m.analysisSpinner.ViewWithCustomLabel("Analyzing directory..."))
+		spinnerContent := m.analysisSpinner.ViewWithCustomLabel(locales.T("common.loading"))
+		return styles.MainWindow.Width(contentWidth).Render(spinnerContent)
 	}
 
 	if m.err != nil {
-		return styles.ErrorStyle.Render(fmt.Sprintf("Error: %v", m.err))
+		errContent := styles.ErrorStyle.Render(fmt.Sprintf("%s: %v", locales.T("common.error"), m.err))
+		return styles.MainWindow.Width(contentWidth).Render(errContent)
 	}
 
 	var s strings.Builder
 
-	title := styles.TitleStyle.Render("JOB SETUP")
+	// Header bar
+	headerBar := strings.Repeat("▒", contentWidth-4)
+	s.WriteString(headerBar + "\n")
+
+	title := styles.TitleStyle.Render(locales.T("job.title"))
 	if m.jobConfig.BatchMode {
-		title += styles.SubtleStyle.Render(fmt.Sprintf(" (Batch: %d Files)", len(m.jobConfig.Files)))
+		title += styles.SubtleStyle.Render(fmt.Sprintf(" (%s)", locales.Tf("job.batch_label", len(m.jobConfig.Files))))
 	}
-	s.WriteString(title + "\n\n")
+	s.WriteString(title + "\n")
+	s.WriteString(headerBar + "\n\n")
 
-	s.WriteString(styles.SectionStyle.Render("1. EXTRACTION STRATEGY") + "\n")
+	// Section 1: Extraction Strategy
+	s.WriteString(styles.SectionStyle.Render("1. "+locales.T("job.extraction.title")) + "\n")
 
+	// Show subtitle source selection
 	if m.hasConflicts {
-		s.WriteString(styles.WarningStyle.Render("  [!] MULTIPLE TRACKS FOUND") + " ")
-		s.WriteString(styles.KeyHintStyle.Render("[ r ]") + " RESOLVE\n")
+		s.WriteString(styles.WarningStyle.Render("  "+locales.T("job.extraction.multiple_tracks_warning")) + " ")
+		s.WriteString(styles.KeyHintStyle.Render("[ r ]") + " " + locales.T("job.extraction.resolve_button") + "\n")
+		s.WriteString("      " + locales.T("job.extraction.resolve_help") + "\n")
+	} else if len(m.jobConfig.Files) > 0 && len(m.jobConfig.Files[0].Tracks) > 0 {
+		// Show selected track info
+		selectedTrack := locales.T("job.extraction.auto_detect")
+		for _, file := range m.jobConfig.Files {
+			if file.SelectedTrackID >= 0 {
+				for _, track := range file.Tracks {
+					if track.ID == file.SelectedTrackID && track.Type == "subtitles" {
+						selectedTrack = fmt.Sprintf("Track %d (%s) - %s", track.ID, track.Language, track.Codec)
+						break
+					}
+				}
+				break
+			}
+		}
+		s.WriteString(fmt.Sprintf("  %s [ %s ]\n", locales.T("job.extraction.subtitle_source"), selectedTrack))
 	} else {
-		s.WriteString("  ✓ Tracks auto-detected\n")
+		s.WriteString(fmt.Sprintf("  %s [ %s ]\n", locales.T("job.extraction.subtitle_source"), locales.T("job.extraction.auto_detect")))
 	}
+
+	// Show audio reference
+	if len(m.jobConfig.Files) > 0 && len(m.jobConfig.Files[0].Tracks) > 0 {
+		audioTrack := "None"
+		for _, track := range m.jobConfig.Files[0].Tracks {
+			if track.Type == "audio" {
+				audioTrack = fmt.Sprintf("Track %d (%s) - %s", track.ID, track.Language, track.Codec)
+				break
+			}
+		}
+		s.WriteString(fmt.Sprintf("  %s [ %s ] (For context)\n", locales.T("job.extraction.audio_reference"), audioTrack))
+	}
+
+	// Show extract fonts option
+	extractFonts := "✓"
+	if !m.jobConfig.ExtractFonts {
+		extractFonts = " "
+	}
+	s.WriteString(fmt.Sprintf("  [%s] %s\n", extractFonts, locales.T("job.extraction.extract_fonts")))
 	s.WriteString("\n")
 
-	s.WriteString(styles.SectionStyle.Render("2. TRANSLATION CONTEXT") + "\n")
-	s.WriteString(fmt.Sprintf("  Media Type: %s\n", m.jobConfig.MediaType))
-	s.WriteString(fmt.Sprintf("  Target Lang: %s\n", m.jobConfig.TargetLang))
-	s.WriteString(fmt.Sprintf("  Glossary: %d terms\n", len(m.jobConfig.GlossaryTerms)))
+	// Section 2: Translation Context
+	s.WriteString(styles.SectionStyle.Render("2. "+locales.T("job.translation.title")) + "\n")
+
+	// Media Type - interactive selector
+	mediaTypeDisplay := locales.T("job.media_types." + m.jobConfig.MediaType)
+	s.WriteString(fmt.Sprintf("  %s %s  ", locales.T("job.translation.media_type"), styles.AccentStyle.Render("[ "+mediaTypeDisplay+" ]")))
+	s.WriteString(styles.KeyHintStyle.Render("[ m ]") + " " + locales.T("common.next") + "\n")
+
+	// Target Language
+	s.WriteString(fmt.Sprintf("  %s %s\n", locales.T("job.translation.target_lang"), m.jobConfig.TargetLang))
+
+	// Glossary
+	glossaryTerms := locales.Tf("job.translation.glossary_terms", len(m.jobConfig.GlossaryTerms))
+	s.WriteString(fmt.Sprintf("  %s %s\n", locales.T("job.translation.glossary"), glossaryTerms))
 	s.WriteString("\n")
 
-	s.WriteString(styles.SectionStyle.Render("3. MUXING OUTPUT") + "\n")
-	s.WriteString(fmt.Sprintf("  Mode: %s\n", m.jobConfig.MuxMode))
+	// Section 3: Muxing Output
+	s.WriteString(styles.SectionStyle.Render("3. "+locales.T("job.muxing.title")) + "\n")
+
+	// Mux Mode - interactive selector
+	muxModeDisplay := locales.T("job.mux_modes." + m.jobConfig.MuxMode)
+	s.WriteString(fmt.Sprintf("  %s %s  ", locales.T("job.muxing.mode"), styles.AccentStyle.Render("[ "+muxModeDisplay+" ]")))
+	s.WriteString(styles.KeyHintStyle.Render("[ x ]") + " " + locales.T("common.next") + "\n")
 	s.WriteString("\n")
 
-	s.WriteString(styles.InfoBoxStyle.Render(fmt.Sprintf(
-		"[i] COST ESTIMATION\n"+
-			"Model: %s  |  Est. Tokens: %dk  |  Est. Cost: $%.2f",
-		m.jobConfig.AIModel,
-		m.jobConfig.EstimatedTokens/1000,
-		m.jobConfig.EstimatedCost,
+	// Cost Estimation Box
+	s.WriteString(styles.InfoBoxStyle.Width(contentWidth-6).Render(fmt.Sprintf(
+		"[i] %s\n"+
+			"%s %s  |  %s %dk  |  %s $%.2f",
+		locales.T("job.estimation.title"),
+		locales.T("job.estimation.model"), m.jobConfig.AIModel,
+		locales.T("job.estimation.tokens"), m.jobConfig.EstimatedTokens/1000,
+		locales.T("job.estimation.cost"), m.jobConfig.EstimatedCost,
 	)) + "\n\n")
 
+	// Footer with keybindings
 	footer := ""
-	footer += styles.KeyHintStyle.Render("[ESC]") + " BACK      "
-	footer += styles.KeyHintStyle.Render("[ d ]") + " SIMULATION (DRY RUN)      "
-	footer += styles.KeyHintStyle.Render("[ g ]") + " GLOSSARY      "
+	footer += styles.KeyHintStyle.Render("[ESC]") + " " + locales.T("job.footer.back") + "      "
+	footer += styles.KeyHintStyle.Render("[ d ]") + " " + locales.T("job.footer.simulation") + "      "
+	footer += styles.KeyHintStyle.Render("[ g ]") + " " + locales.T("job.translation.glossary") + "      "
 
 	if m.canStart {
-		footer += styles.SuccessStyle.Render("[ENTER] START JOB")
+		footer += styles.SuccessStyle.Render("[ENTER] " + locales.T("job.footer.start"))
 	} else {
-		footer += styles.DisabledStyle.Render("[ START DISABLED - RESOLVE CONFLICTS ]")
+		footer += styles.DisabledStyle.Render("[ " + locales.T("job.footer.start_disabled") + " ]")
 	}
 
 	s.WriteString(footer)
 
-	return styles.AppStyle.Render(s.String())
+	return styles.MainWindow.Width(contentWidth).Render(s.String())
 }
 
 func (m Model) renderWithOverlay(overlay string) string {
+	// Use dimmed background with modal overlay
+	if m.width > 0 && m.height > 0 {
+		return styles.RenderModalWithOverlay(overlay, m.width, m.height)
+	}
+	// Fallback to simple overlay
 	base := m.renderMain()
 	return base + "\n\n" + overlay
+}
+
+func (m Model) renderDirectoryModal() string {
+	var s strings.Builder
+
+	titleStyle := styles.TitleStyle.
+		Width(54)
+
+	contentStyle := styles.Panel.
+		Width(54).
+		Padding(1, 2)
+
+	s.WriteString(titleStyle.Render(locales.T("job.directory_detected")))
+	s.WriteString("\n")
+
+	content := fmt.Sprintf(
+		"%s %s\n\n"+
+			"%s\n"+
+			"• %s %d\n"+
+			"• %s 00\n\n"+
+			"%s\n\n"+
+			"  %s "+locales.T("job.process_batch")+"\n"+
+			"      "+locales.T("job.batch_note")+"\n\n"+
+			"  %s "+locales.T("job.select_single_file")+"\n"+
+			"      "+locales.T("job.single_file_note")+"\n\n"+
+			"  %s "+locales.T("common.cancel"),
+		locales.T("job.path_label"),
+		filepath.Base(m.jobConfig.InputPath),
+		locales.T("job.analysis"),
+		locales.T("job.mkv_files_found"),
+		m.dirMKVCount,
+		locales.T("job.subtitles_found"),
+		locales.T("job.how_to_proceed"),
+		styles.KeyHintStyle.Render("[ b ]"),
+		m.dirMKVCount,
+		styles.KeyHintStyle.Render("[ s ]"),
+		styles.KeyHintStyle.Render("[ESC]"),
+	)
+
+	s.WriteString(contentStyle.Render(content))
+
+	return styles.ModalStyle.Width(60).Render(s.String())
 }

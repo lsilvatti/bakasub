@@ -28,8 +28,15 @@ type Result struct {
 	PassedAll bool
 }
 
+// CheckOptions configures the linter behavior
+type CheckOptions struct {
+	SourceLang string            // Source language ISO code
+	TargetLang string            // Target language ISO code
+	Glossary   map[string]string // Project glossary for mismatch detection
+}
+
 // Check runs all quality checks on translated subtitle lines
-func Check(lines []string, sourceLang string) Result {
+func Check(lines []string, opts CheckOptions) Result {
 	result := Result{
 		Issues:    []Issue{},
 		PassedAll: true,
@@ -49,8 +56,8 @@ func Check(lines []string, sourceLang string) Result {
 		}
 
 		// Check 3: Source language residue (English detection)
-		if sourceLang != "eng" {
-			if residueIssue := checkSourceResidue(i+1, line, sourceLang); residueIssue != nil {
+		if opts.SourceLang != "" && opts.SourceLang != opts.TargetLang {
+			if residueIssue := checkSourceResidue(i+1, line, opts.SourceLang); residueIssue != nil {
 				result.Issues = append(result.Issues, *residueIssue)
 				result.PassedAll = false
 			}
@@ -61,9 +68,22 @@ func Check(lines []string, sourceLang string) Result {
 			result.Issues = append(result.Issues, *punctIssue)
 			result.PassedAll = false
 		}
+
+		// Check 5: Glossary mismatch
+		if len(opts.Glossary) > 0 {
+			if glossaryIssue := checkGlossaryMismatch(i+1, line, opts.Glossary); glossaryIssue != nil {
+				result.Issues = append(result.Issues, *glossaryIssue)
+				// Glossary mismatches are warnings, not failures
+			}
+		}
 	}
 
 	return result
+}
+
+// CheckSimple runs quality checks with minimal options (backwards compatibility)
+func CheckSimple(lines []string, sourceLang string) Result {
+	return Check(lines, CheckOptions{SourceLang: sourceLang})
 }
 
 // AutoFix attempts to fix all auto-fixable issues
@@ -196,6 +216,31 @@ func checkPunctuation(lineID int, text string) *Issue {
 			Content:     truncate(text, 50),
 			Suggestion:  "Reduce repeated punctuation",
 			AutoFixable: true,
+		}
+	}
+
+	return nil
+}
+
+// checkGlossaryMismatch checks if glossary terms were translated correctly
+func checkGlossaryMismatch(lineID int, translatedText string, glossary map[string]string) *Issue {
+	lowerText := strings.ToLower(translatedText)
+
+	for original, expected := range glossary {
+		// Check if original term appears but expected translation doesn't
+		if strings.Contains(lowerText, strings.ToLower(original)) {
+			// Check if expected translation also appears (it should)
+			if !strings.Contains(lowerText, strings.ToLower(expected)) {
+				return &Issue{
+					LineID:    lineID,
+					Severity:  SeverityLow,
+					IssueType: "Glossary Mismatch",
+					Content:   truncate(translatedText, 50),
+					Suggestion: fmt.Sprintf("Expected '%s' to be translated as '%s'",
+						original, expected),
+					AutoFixable: false,
+				}
+			}
 		}
 	}
 

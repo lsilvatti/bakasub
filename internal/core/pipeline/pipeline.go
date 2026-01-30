@@ -11,9 +11,16 @@ import (
 
 	"github.com/lsilvatti/bakasub/internal/core/ai"
 	"github.com/lsilvatti/bakasub/internal/core/db"
+	"github.com/lsilvatti/bakasub/internal/core/linter"
 	"github.com/lsilvatti/bakasub/internal/core/media"
+	"github.com/lsilvatti/bakasub/internal/core/ner"
 	"github.com/lsilvatti/bakasub/internal/core/parser"
 )
+
+// NewNERScanner creates a new NER scanner (wrapper for ner package)
+func NewNERScanner() *ner.Scanner {
+	return ner.NewScanner()
+}
 
 // Pipeline orchestrates the translation workflow
 type Pipeline struct {
@@ -37,7 +44,10 @@ type PipelineConfig struct {
 	RemoveHI          bool
 	Glossary          map[string]string
 	SystemPrompt      string
-	SlidingWindowSize int // Number of lines for context
+	SlidingWindowSize int    // Number of lines for context
+	TrackID           int    // Subtitle track ID to extract (-1 for auto-detect)
+	MuxMode           string // "replace" or "new-file"
+	BackupOriginal    bool   // Create backup before replace
 }
 
 // ResumeState holds state for smart resume
@@ -77,12 +87,29 @@ func New(provider ai.LLMProvider, cache *db.Cache, config *PipelineConfig) *Pipe
 func (p *Pipeline) Execute(ctx context.Context) error {
 	p.log("Starting translation pipeline...")
 
+	// Determine track ID to use
+	trackID := p.Config.TrackID
+	if trackID < 0 {
+		// Auto-detect: find first subtitle track
+		p.log("Auto-detecting subtitle track...")
+		fileInfo, err := media.Analyze(p.Config.InputPath)
+		if err != nil {
+			return fmt.Errorf("failed to analyze file: %w", err)
+		}
+		subTracks := media.GetSubtitleTracks(fileInfo)
+		if len(subTracks) == 0 {
+			return fmt.Errorf("no subtitle tracks found in file")
+		}
+		trackID = subTracks[0].ID
+		p.log(fmt.Sprintf("Using subtitle track %d (%s)", trackID, subTracks[0].Language))
+	}
+
 	// Step 1: Extract subtitle track
 	p.log("Extracting subtitle track...")
 	tempSubPath := filepath.Join(os.TempDir(), "bakasub_temp.ass")
 	defer os.Remove(tempSubPath)
 
-	if err := media.ExtractSubtitleTrack(p.Config.InputPath, 2, tempSubPath); err != nil {
+	if err := media.ExtractSubtitleTrack(p.Config.InputPath, trackID, tempSubPath); err != nil {
 		return fmt.Errorf("extract failed: %w", err)
 	}
 
@@ -99,6 +126,24 @@ func (p *Pipeline) Execute(ctx context.Context) error {
 		p.log("Removing hearing impaired tags...")
 		for i := range subFile.Lines {
 			subFile.Lines[i].Text = parser.RemoveHearingImpairedTags(subFile.Lines[i].Text)
+		}
+	}
+
+	// Step 3.5: NER Scan for Volatile Glossary (if no project glossary provided)
+	if len(p.Config.Glossary) == 0 {
+		p.log("Scanning for named entities (Volatile Glossary)...")
+		nerScanner := NewNERScanner()
+		entities := nerScanner.ScanLines(subFile.Lines)
+		if len(entities) > 0 {
+			p.log(fmt.Sprintf("Detected %d potential entities", len(entities)))
+			// Create volatile glossary from detected entities
+			p.Config.Glossary = make(map[string]string)
+			for _, e := range entities {
+				// Only add high-confidence entities (preserve original form)
+				if e.Confidence >= 0.7 {
+					p.Config.Glossary[e.Text] = e.Text
+				}
+			}
 		}
 	}
 
@@ -170,8 +215,48 @@ func (p *Pipeline) Execute(ctx context.Context) error {
 
 	// Step 6: Mux back into video
 	p.log("Muxing translated subtitle...")
-	if err := media.MuxSubtitle(p.Config.InputPath, translatedPath, p.Config.OutputPath); err != nil {
+
+	// Handle replace mode - use temp file to avoid overwriting source
+	outputPath := p.Config.OutputPath
+	isReplaceMode := p.Config.MuxMode == "replace" || outputPath == p.Config.InputPath
+	var tempOutputPath string
+
+	if isReplaceMode {
+		// Create backup if enabled
+		if p.Config.BackupOriginal {
+			backupPath := p.Config.InputPath + ".bak"
+			p.log(fmt.Sprintf("Creating backup: %s", filepath.Base(backupPath)))
+			input, err := os.ReadFile(p.Config.InputPath)
+			if err != nil {
+				return fmt.Errorf("failed to read input for backup: %w", err)
+			}
+			if err := os.WriteFile(backupPath, input, 0644); err != nil {
+				return fmt.Errorf("failed to create backup: %w", err)
+			}
+		}
+
+		// Use temp file for output to avoid same input/output error
+		tempOutputPath = filepath.Join(os.TempDir(), "bakasub_mux_temp.mkv")
+		outputPath = tempOutputPath
+		defer os.Remove(tempOutputPath)
+	}
+
+	if err := media.MuxSubtitle(p.Config.InputPath, translatedPath, outputPath); err != nil {
 		return fmt.Errorf("mux failed: %w", err)
+	}
+
+	// In replace mode, move temp file to original location
+	if isReplaceMode && tempOutputPath != "" {
+		p.log("Replacing original file...")
+		// Read the temp file
+		tempData, err := os.ReadFile(tempOutputPath)
+		if err != nil {
+			return fmt.Errorf("failed to read temp output: %w", err)
+		}
+		// Write to original location
+		if err := os.WriteFile(p.Config.InputPath, tempData, 0644); err != nil {
+			return fmt.Errorf("failed to replace original file: %w", err)
+		}
 	}
 
 	// Clean up resume state
@@ -183,6 +268,13 @@ func (p *Pipeline) Execute(ctx context.Context) error {
 
 // translateBatch translates a single batch with anti-desync protocol
 func (p *Pipeline) translateBatch(ctx context.Context, batch TranslationBatch) ([]parser.SubtitleLine, error) {
+	return p.translateBatchWithRetry(ctx, batch, 0)
+}
+
+// translateBatchWithRetry implements self-healing split strategy
+// maxDepth prevents infinite recursion (max 3 levels: 50 -> 25 -> 12 -> 6)
+func (p *Pipeline) translateBatchWithRetry(ctx context.Context, batch TranslationBatch, depth int) ([]parser.SubtitleLine, error) {
+	const maxRetryDepth = 3
 	langPair := fmt.Sprintf("%s->%s", p.Config.SourceLang, p.Config.TargetLang)
 
 	// Check cache for each line
@@ -223,15 +315,57 @@ func (p *Pipeline) translateBatch(ctx context.Context, batch TranslationBatch) (
 
 	// Send to AI provider
 	response, err := p.Provider.SendBatch(ctx, payload, systemPrompt)
-	if err != nil {
-		return nil, err
-	}
 
-	// Anti-desync check: verify count matches
-	if len(response) != len(needsTranslation) {
-		p.log(fmt.Sprintf("  DESYNC DETECTED: Expected %d, got %d", len(needsTranslation), len(response)))
-		// Trigger split strategy (not implemented in this demo)
-		return nil, fmt.Errorf("desync: count mismatch")
+	// Handle errors or desync with self-healing split strategy
+	if err != nil || len(response) != len(needsTranslation) {
+		if err != nil {
+			p.log(fmt.Sprintf("  AI ERROR: %v", err))
+		} else {
+			p.log(fmt.Sprintf("  DESYNC DETECTED: Expected %d, got %d", len(needsTranslation), len(response)))
+		}
+
+		// If we can still split, try self-healing
+		if depth < maxRetryDepth && len(batch.Lines) > 1 {
+			p.log(fmt.Sprintf("  └─ Engaging Self-Healing Protocol (Split Strategy, depth=%d)", depth+1))
+
+			// Split batch in half
+			mid := len(batch.Lines) / 2
+
+			batchA := TranslationBatch{
+				Lines:        batch.Lines[:mid],
+				ContextLines: batch.ContextLines,
+				BatchIndex:   batch.BatchIndex,
+				TotalBatches: batch.TotalBatches,
+			}
+
+			batchB := TranslationBatch{
+				Lines:        batch.Lines[mid:],
+				ContextLines: batch.Lines[max(0, mid-p.Config.SlidingWindowSize):mid], // Use end of A as context for B
+				BatchIndex:   batch.BatchIndex,
+				TotalBatches: batch.TotalBatches,
+			}
+
+			p.log(fmt.Sprintf("  └─ Split %da (Lines 1-%d) processing...", batch.BatchIndex+1, mid))
+			resultA, errA := p.translateBatchWithRetry(ctx, batchA, depth+1)
+			if errA != nil {
+				return nil, fmt.Errorf("split A failed: %w", errA)
+			}
+
+			p.log(fmt.Sprintf("  └─ Split %db (Lines %d-%d) processing...", batch.BatchIndex+1, mid+1, len(batch.Lines)))
+			resultB, errB := p.translateBatchWithRetry(ctx, batchB, depth+1)
+			if errB != nil {
+				return nil, fmt.Errorf("split B failed: %w", errB)
+			}
+
+			// Merge results
+			return append(resultA, resultB...), nil
+		}
+
+		// Max depth reached, fail
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("desync: count mismatch after %d splits", depth)
 	}
 
 	// Apply translations
@@ -240,6 +374,25 @@ func (p *Pipeline) translateBatch(ctx context.Context, batch TranslationBatch) (
 			translatedLines[resp.ID].Text = resp.Text
 			// Cache the translation
 			p.Cache.SaveTranslation(batch.Lines[resp.ID].Text, resp.Text, langPair)
+		}
+	}
+
+	// Quality Gate: Run linter on translated lines
+	if depth == 0 { // Only lint at top level to avoid retry loops
+		lintResult := p.lintTranslation(translatedLines)
+		if !lintResult.PassedAll && len(lintResult.Issues) > 0 {
+			highSeverityCount := 0
+			for _, issue := range lintResult.Issues {
+				if issue.Severity == linter.SeverityHigh {
+					highSeverityCount++
+				}
+			}
+
+			// Only retry if high severity issues found
+			if highSeverityCount > 0 && depth < maxRetryDepth {
+				p.log(fmt.Sprintf("  Quality Gate: %d HIGH severity issues, retrying...", highSeverityCount))
+				return p.translateBatchWithRetry(ctx, batch, depth+1)
+			}
 		}
 	}
 
@@ -252,21 +405,23 @@ func (p *Pipeline) buildSystemPrompt(contextLines []parser.SubtitleLine) string 
 
 	// Inject glossary
 	if len(p.Config.Glossary) > 0 {
-		glossaryText := "\n\nGlossary (preserve these terms):\n"
+		glossaryText := "\n\nGlossary (preserve these terms exactly as specified):\n"
 		for orig, trans := range p.Config.Glossary {
-			glossaryText += fmt.Sprintf("- %s -> %s\n", orig, trans)
+			glossaryText += fmt.Sprintf("- \"%s\" -> \"%s\"\n", orig, trans)
 		}
 		prompt = strings.Replace(prompt, "{{glossary}}", glossaryText, 1)
 	} else {
 		prompt = strings.Replace(prompt, "{{glossary}}", "", 1)
 	}
 
-	// Add sliding window context
+	// Add sliding window context (passive context from previous batch)
+	// Per spec: last 3 lines of Batch N appended as read-only context at start of Batch N+1
 	if len(contextLines) > 0 {
-		contextText := "\n\nPrevious lines (for context only, do not translate):\n"
-		for _, line := range contextLines {
-			contextText += fmt.Sprintf("- %s\n", line.Text)
+		contextText := "\n\n---\nPASSIVE CONTEXT (Previous lines for reference - DO NOT translate these):\n"
+		for i, line := range contextLines {
+			contextText += fmt.Sprintf("%d. %s\n", i+1, line.Text)
 		}
+		contextText += "---\n"
 		prompt += contextText
 	}
 
@@ -309,9 +464,15 @@ func (p *Pipeline) clearResumeState() {
 	os.Remove(tempPath)
 }
 
-// LoadResumeState loads .bakasub.temp if it exists
-func LoadResumeState(videoPath string) (*ResumeState, error) {
-	tempPath := filepath.Join(filepath.Dir(videoPath), ".bakasub.temp")
+// LoadResumeState loads .bakasub.temp if it exists in the video's directory
+func LoadResumeState(path string) (*ResumeState, error) {
+	// If path points directly to a .temp file, use it
+	// Otherwise, assume it's a video path and look for the temp file
+	tempPath := path
+	if !strings.HasSuffix(path, ".bakasub.temp") {
+		tempPath = filepath.Join(filepath.Dir(path), ".bakasub.temp")
+	}
+
 	data, err := os.ReadFile(tempPath)
 	if err != nil {
 		return nil, err
@@ -323,4 +484,22 @@ func LoadResumeState(videoPath string) (*ResumeState, error) {
 	}
 
 	return &state, nil
+}
+
+// lintTranslation runs quality checks on translated lines
+func (p *Pipeline) lintTranslation(lines []parser.SubtitleLine) linter.Result {
+	// Extract text from lines
+	texts := make([]string, len(lines))
+	for i, line := range lines {
+		texts[i] = line.Text
+	}
+
+	// Build lint options
+	opts := linter.CheckOptions{
+		SourceLang: p.Config.SourceLang,
+		TargetLang: p.Config.TargetLang,
+		Glossary:   p.Config.Glossary,
+	}
+
+	return linter.Check(texts, opts)
 }

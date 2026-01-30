@@ -48,6 +48,12 @@ func (f *ProviderFactory) CreateProvider(ctx context.Context) (LLMProvider, erro
 		}
 		return NewOpenRouterAdapter(f.config.APIKey, model, temperature), nil
 
+	case "openai":
+		if f.config.APIKey == "" {
+			return nil, fmt.Errorf("API key not configured for OpenAI")
+		}
+		return NewOpenAIAdapter(f.config.APIKey, model, temperature), nil
+
 	case "gemini", "google", "google-gemini":
 		if f.config.APIKey == "" {
 			return nil, fmt.Errorf("API key not configured for Gemini")
@@ -84,6 +90,14 @@ func (f *ProviderFactory) GetProviderInfo() (*ProviderInfo, error) {
 			Type:        "cloud",
 			RequiresKey: true,
 			Endpoint:    "https://openrouter.ai/api/v1",
+		}, nil
+
+	case "openai":
+		return &ProviderInfo{
+			Name:        "OpenAI",
+			Type:        "cloud",
+			RequiresKey: true,
+			Endpoint:    "https://api.openai.com/v1",
 		}, nil
 
 	case "gemini", "google", "google-gemini":
@@ -141,7 +155,14 @@ func (f *ProviderFactory) ValidateConfiguration(ctx context.Context) error {
 func ListAvailableProviders() []string {
 	return []string{
 		"openrouter",
+		"openai",
 		"gemini",
 		"local",
 	}
+}
+
+// NewProvider is a convenience function that creates a provider from config
+func NewProvider(cfg *config.Config) (LLMProvider, error) {
+	factory := NewProviderFactory(cfg)
+	return factory.CreateProvider(context.Background())
 }

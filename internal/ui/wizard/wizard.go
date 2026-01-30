@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,6 +14,7 @@ import (
 	"github.com/lsilvatti/bakasub/internal/core/dependencies"
 	"github.com/lsilvatti/bakasub/internal/locales"
 	"github.com/lsilvatti/bakasub/internal/ui/components"
+	"github.com/lsilvatti/bakasub/internal/ui/components/modelselect"
 	"github.com/lsilvatti/bakasub/internal/ui/focus"
 	"github.com/lsilvatti/bakasub/internal/ui/layout"
 	"github.com/lsilvatti/bakasub/internal/ui/styles"
@@ -107,14 +109,11 @@ type Model struct {
 	apiKeyInput       textinput.Model
 	apiEndpointInput  textinput.Model
 	showAPIKey        bool
+	validatingKey     bool // true while validating key
 	keyValidated      bool
-	modelSelection    int
-	modelTab          int // 0=FREE, 1=ALL MODELS
-	modelSearchInput  textinput.Model
-	availableModels   []ModelInfo
-	filteredModels    []ModelInfo
+	keyValidationErr  string            // validation error message
+	modelSelector     modelselect.Model // New reusable component
 	loadingModels     bool
-	modelScrollOffset int // For scrolling through long lists
 
 	// Step 3: Target Language + Preferences
 	activeStep3Section int // 0=Language, 1=Preferences
@@ -149,12 +148,10 @@ func New(cfg *config.Config) Model {
 	customLang.CharLimit = 10
 	customLang.Width = 30
 
-	modelSearch := textinput.New()
-	modelSearch.Placeholder = "Search models..."
-	modelSearch.CharLimit = 50
-	modelSearch.Width = 54
-
 	fm := focus.NewManager(1) // 1 text input field at a time
+
+	// Create model selector component
+	modelSelector := modelselect.New(fm)
 
 	// Detect current language and set the correct selection index
 	currentLang := locales.GetCurrentLocale()
@@ -179,11 +176,8 @@ func New(cfg *config.Config) Model {
 		providerSelection:   0,
 		apiKeyInput:         apiKey,
 		apiEndpointInput:    apiEndpoint,
-		modelTab:            0, // Start on FREE tab
-		modelSearchInput:    modelSearch,
-		availableModels:     []ModelInfo{},
-		filteredModels:      []ModelInfo{},
-		modelScrollOffset:   0,
+		modelSelector:       modelSelector,
+		loadingModels:       false,
 		activeStep3Section:  0,
 		languageSelection:   0, // PT-BR default
 		customLangCode:      customLang,
@@ -196,7 +190,8 @@ func New(cfg *config.Config) Model {
 func (m Model) Init() tea.Cmd {
 	// Start dependency check immediately on Step 1
 	spinnerCmd := m.depSpinner.Start()
-	return tea.Batch(textinput.Blink, checkDependencies, spinnerCmd)
+	// Request current terminal size
+	return tea.Batch(tea.WindowSize(), textinput.Blink, checkDependencies, spinnerCmd)
 }
 
 // Update handles messages
@@ -227,25 +222,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Blur all inputs when exiting
 					m.apiKeyInput.Blur()
 					m.apiEndpointInput.Blur()
-					m.modelSearchInput.Blur()
 					m.customLangCode.Blur()
 					return m, tea.Batch(cmds...)
 				}
 			}
-			// In Step 2, ENTER toggles edit mode (handled in handleKeyPress)
-			if msg.String() == "enter" && m.step == StepProvider {
+			// In Step 2 and Step 3, ENTER exits input mode
+			if msg.String() == "enter" && (m.step == StepProvider || m.step == StepDefaults) {
 				// Exit input mode
 				m.focusManager.ExitInput()
 				m.apiKeyInput.Blur()
 				m.apiEndpointInput.Blur()
-				m.modelSearchInput.Blur()
-				// Fetch models after entering API key
-				if m.apiKeyInput.Value() != "" || m.apiEndpointInput.Value() != "" {
-					m.loadingModels = true
-					cmds = append(cmds, m.fetchModelsCmd())
+				m.customLangCode.Blur()
+				m.modelSelector.SetActive(false)
+				// Validate key with real API request ONLY if in credentials section
+				if m.step == StepProvider && m.activeSection == 1 {
+					keyValue := m.apiKeyInput.Value()
+					endpointValue := m.apiEndpointInput.Value()
+					if (keyValue != "" && m.providerSelection != 3) || (endpointValue != "" && m.providerSelection == 3) {
+						// Only validate if key was changed (not already validated)
+						if !m.keyValidated || m.keyValidationErr != "" {
+							// Start validation
+							m.validatingKey = true
+							m.keyValidated = false
+							m.keyValidationErr = ""
+							cmds = append(cmds, m.validateKeyCmd())
+						}
+					}
 				}
-				// Filter models after search
-				m.filterModels()
+				return m, tea.Batch(cmds...)
+			}
+			// "/" exits search mode
+			if msg.String() == "/" && m.step == StepProvider && m.activeSection == 2 {
+				m.focusManager.ExitInput()
+				m.modelSelector.SetActive(false)
 				return m, tea.Batch(cmds...)
 			}
 			// Forward to active input
@@ -258,6 +267,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// In nav mode - handle navigation and global hotkeys
+		// First, delegate to model selector if it's active (but NOT for global keys like enter, tab, esc)
+		if m.step == StepProvider && m.activeSection == 2 && m.modelSelector.IsActive() {
+			// These keys should be handled by the wizard, not the model selector
+			switch msg.String() {
+			case "enter", "tab", "esc", "q", "ctrl+c":
+				// Fall through to handleKeyPress
+			default:
+				// Delegate other keys to model selector
+				var selectorCmd tea.Cmd
+				m.modelSelector, selectorCmd = m.modelSelector.Update(msg)
+				if selectorCmd != nil {
+					cmds = append(cmds, selectorCmd)
+				}
+				return m, tea.Batch(cmds...)
+			}
+		}
+
 		model, cmd := m.handleKeyPress(msg)
 		m = model.(Model)
 		if cmd != nil {
@@ -299,13 +325,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loadingModels = false
 		if msg.err != nil {
 			// Failed to load models - use empty list
-			m.availableModels = []ModelInfo{}
-			m.filteredModels = []ModelInfo{}
+			models := []modelselect.ModelInfo{}
+			m.modelSelector.SetModels(models)
 		} else {
-			m.availableModels = msg.models
-			m.modelSelection = 0 // Reset selection
-			m.modelScrollOffset = 0
-			m.filterModels() // Apply initial filter
+			// Convert ModelInfo to modelselect.ModelInfo
+			models := make([]modelselect.ModelInfo, len(msg.models))
+			for i, model := range msg.models {
+				models[i] = modelselect.ModelInfo{
+					ID:          model.ID,
+					Name:        model.Name,
+					ContextSize: model.ContextSize,
+					PricePerM:   model.PricePerM,
+					IsFree:      model.IsFree,
+				}
+			}
+			m.modelSelector.SetModels(models)
+		}
+		return m, tea.Batch(cmds...)
+
+	case keyValidatedMsg:
+		m.validatingKey = false
+		if msg.isValid {
+			m.keyValidated = true
+			m.keyValidationErr = ""
+			// Start loading models after successful validation
+			m.loadingModels = true
+			cmds = append(cmds, m.fetchModelsCmd())
+		} else {
+			m.keyValidated = false
+			if msg.err != nil {
+				m.keyValidationErr = msg.err.Error()
+			} else {
+				m.keyValidationErr = "Invalid key"
+			}
 		}
 		return m, tea.Batch(cmds...)
 	}
@@ -320,14 +372,26 @@ func (m Model) updateActiveInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.step == StepProvider {
 		if m.activeSection == 1 { // Credentials section
 			if m.providerSelection == 3 { // Local LLM - endpoint input
+				oldValue := m.apiEndpointInput.Value()
 				m.apiEndpointInput, cmd = m.apiEndpointInput.Update(msg)
+				// Reset validation if endpoint changed
+				if m.apiEndpointInput.Value() != oldValue {
+					m.keyValidated = false
+					m.keyValidationErr = ""
+				}
 			} else { // API Key input
+				oldValue := m.apiKeyInput.Value()
 				m.apiKeyInput, cmd = m.apiKeyInput.Update(msg)
+				// Reset validation if key changed
+				if m.apiKeyInput.Value() != oldValue {
+					m.keyValidated = false
+					m.keyValidationErr = ""
+				}
 			}
-		} else if m.activeSection == 2 && m.modelTab == 1 { // Model search in ALL tab
-			m.modelSearchInput, cmd = m.modelSearchInput.Update(msg)
-			// Real-time filtering as user types
-			m.filterModels()
+		} else if m.activeSection == 2 && m.modelSelector.IsActive() { // Model search
+			var selectorCmd tea.Cmd
+			m.modelSelector, selectorCmd = m.modelSelector.Update(msg)
+			cmd = selectorCmd
 		}
 	} else if m.step == StepDefaults && m.targetLangOther {
 		m.customLangCode, cmd = m.customLangCode.Update(msg)
@@ -351,6 +415,11 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "esc":
+		// If model selector is active, deactivate it first
+		if m.step == StepProvider && m.activeSection == 2 && m.modelSelector.IsActive() {
+			m.modelSelector.SetActive(false)
+			return m, nil
+		}
 		// Step 1: Quit the wizard
 		if m.step == StepLanguageDeps {
 			m.quitting = true
@@ -372,9 +441,16 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "tab":
 		// Tab cycles through sections
 		if m.step == StepProvider {
-			// Only cycle if in navigation mode (not editing)
-			if m.focusManager.Mode() == focus.ModeNav {
-				m.activeSection = (m.activeSection + 1) % 3
+			// Cycle through sections even if in input mode (exit input mode first)
+			if m.focusManager.Mode() != focus.ModeNav {
+				m.focusManager.ExitInput()
+				m.apiKeyInput.Blur()
+				m.apiEndpointInput.Blur()
+			}
+			m.activeSection = (m.activeSection + 1) % 3
+			// Reset model selector when navigating away
+			if m.activeSection != 2 {
+				m.modelSelector.SetActive(false)
 			}
 		} else if m.step == StepDefaults {
 			// Cycle between Language (0) and Preferences (1) sections
@@ -384,8 +460,8 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "enter":
-		// In Step 2, ENTER toggles edit mode in credentials section
+	case "e":
+		// In Step 2, E enters edit mode in credentials section
 		if m.step == StepProvider {
 			if m.activeSection == 1 && m.focusManager.Mode() == focus.ModeNav {
 				// Credentials section - enter input mode
@@ -397,24 +473,24 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.apiKeyInput.Focus()
 					m.apiEndpointInput.Blur()
 				}
-				return m, nil
-			} else if m.activeSection == 2 && m.modelTab == 1 && m.focusManager.Mode() == focus.ModeNav {
-				// Model section - enter search mode (ALL tab only)
-				m.focusManager.EnterInput(0)
-				m.modelSearchInput.Focus()
-				return m, nil
+				return m, textinput.Blink
 			}
-			// If in input mode, ENTER exits (handled in gatekeeper above)
-			// For Provider and Model sections, ENTER goes to next step
 		}
-		// In Step 3, if "OTHER" is selected and nav mode, enter custom ISO input
-		if m.step == StepDefaults && m.targetLangOther && m.focusManager.Mode() == focus.ModeNav {
+		return m, nil
+
+	case "enter":
+		// ENTER is for step navigation (handled in gatekeeper for exiting input mode)
+		return m.handleEnter()
+
+	case "/":
+		// "/" key triggers search mode in model section
+		if m.step == StepProvider && m.activeSection == 2 && m.focusManager.Mode() == focus.ModeNav {
+			// Model section - enter search mode
 			m.focusManager.EnterInput(0)
-			m.customLangCode.Focus()
+			m.modelSelector.SetActive(true)
 			return m, nil
 		}
-		// Handle as step navigation
-		return m.handleEnter()
+		return m, nil
 
 	case "up", "k":
 		if m.step == StepLanguageDeps {
@@ -429,15 +505,18 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			case 0: // Provider section
 				if m.providerSelection > 0 {
 					m.providerSelection--
+					// Reset validation state when provider changes
+					m.keyValidated = false
+					m.keyValidationErr = ""
+					m.validatingKey = false
+					m.loadingModels = false
+					m.modelSelector.SetModels(nil)
 				}
-			case 2: // Model selection
-				if m.modelSelection > 0 {
-					m.modelSelection--
-					// Adjust scroll offset if needed
-					if m.modelSelection < m.modelScrollOffset {
-						m.modelScrollOffset = m.modelSelection
-					}
-				}
+			case 2: // Model section - delegate to model selector
+				m.modelSelector.SetActive(true)
+				var selectorCmd tea.Cmd
+				m.modelSelector, selectorCmd = m.modelSelector.Update(msg)
+				return m, selectorCmd
 			}
 		} else if m.step == StepDefaults {
 			if m.activeStep3Section == 0 && m.languageSelection > 0 {
@@ -463,16 +542,18 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			case 0: // Provider section
 				if m.providerSelection < 3 {
 					m.providerSelection++
+					// Reset validation state when provider changes
+					m.keyValidated = false
+					m.keyValidationErr = ""
+					m.validatingKey = false
+					m.loadingModels = false
+					m.modelSelector.SetModels(nil)
 				}
-			case 2: // Model selection
-				models := m.getDisplayModels()
-				if m.modelSelection < len(models)-1 {
-					m.modelSelection++
-					// Adjust scroll offset if needed (show 7 rows at a time)
-					if m.modelSelection-m.modelScrollOffset >= 7 {
-						m.modelScrollOffset = m.modelSelection - 6
-					}
-				}
+			case 2: // Model section - delegate to model selector
+				m.modelSelector.SetActive(true)
+				var selectorCmd tea.Cmd
+				m.modelSelector, selectorCmd = m.modelSelector.Update(msg)
+				return m, selectorCmd
 			}
 		} else if m.step == StepDefaults {
 			if m.activeStep3Section == 0 && m.languageSelection < 6 {
@@ -487,8 +568,8 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case " ":
 		if m.step == StepProvider {
-			// In input mode, toggle API key visibility
-			if m.focusManager.ActiveField() != -1 {
+			// Toggle API key visibility when in credentials section (both nav and input mode)
+			if m.activeSection == 1 && m.providerSelection != 3 {
 				if m.apiKeyInput.EchoMode == textinput.EchoPassword {
 					m.apiKeyInput.EchoMode = textinput.EchoNormal
 					m.showAPIKey = true
@@ -504,15 +585,7 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "left", "h":
-		if m.step == StepProvider && m.activeSection == 2 && m.focusManager.Mode() == focus.ModeNav {
-			// Switch model tabs
-			if m.modelTab > 0 {
-				m.modelTab--
-				m.modelSelection = 0
-				m.modelScrollOffset = 0
-				m.filterModels()
-			}
-		} else if m.step == StepDefaults && m.activeStep3Section == 1 && m.tempValue > 0.1 {
+		if m.step == StepDefaults && m.activeStep3Section == 1 && m.tempValue > 0.1 {
 			m.tempValue -= 0.1
 			if m.tempValue < 0.0 {
 				m.tempValue = 0.0
@@ -521,15 +594,7 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "right", "l":
-		if m.step == StepProvider && m.activeSection == 2 && m.focusManager.Mode() == focus.ModeNav {
-			// Switch model tabs
-			if m.modelTab < 1 {
-				m.modelTab++
-				m.modelSelection = 0
-				m.modelScrollOffset = 0
-				m.filterModels()
-			}
-		} else if m.step == StepDefaults && m.activeStep3Section == 1 && m.tempValue < 1.0 {
+		if m.step == StepDefaults && m.activeStep3Section == 1 && m.tempValue < 1.0 {
 			m.tempValue += 0.1
 			if m.tempValue > 1.0 {
 				m.tempValue = 1.0
@@ -569,11 +634,29 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 			if m.apiEndpointInput.Value() == "" {
 				return m, nil
 			}
+			// Require endpoint validation before proceeding
+			if !m.keyValidated && !m.validatingKey {
+				// Endpoint not validated yet
+				return m, nil
+			}
+			// Wait for validation to complete
+			if m.validatingKey {
+				return m, nil
+			}
 			m.config.LocalEndpoint = m.apiEndpointInput.Value()
 			m.config.AIProvider = "local"
 		} else {
 			// Cloud provider - check API key
 			if m.apiKeyInput.Value() == "" {
+				return m, nil
+			}
+			// Require key validation before proceeding
+			if !m.keyValidated && !m.validatingKey {
+				// Key not validated yet - show error or wait
+				return m, nil
+			}
+			// Wait for validation to complete
+			if m.validatingKey {
 				return m, nil
 			}
 			m.config.APIKey = m.apiKeyInput.Value()
@@ -586,11 +669,12 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 				m.config.AIProvider = "openai"
 			}
 		}
-		// Save selected model if available
-		models := m.getDisplayModels()
-		if m.modelSelection < len(models) {
-			m.config.Model = models[m.modelSelection].ID
+		// Save selected model if available (optional - can proceed without model)
+		selectedModel := m.modelSelector.GetSelectedModel()
+		if selectedModel != nil {
+			m.config.Model = selectedModel.ID
 		}
+		// Allow proceeding even if no model selected - will use default later
 		m.step = StepDefaults
 		return m, nil
 
@@ -603,10 +687,30 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// getReadmeLinkForDependencies returns the appropriate README link with anchor based on current locale
+func getReadmeLinkForDependencies() string {
+	locale := locales.GetCurrentLocale()
+	baseURL := "https://github.com/lsilvatti/bakasub"
+
+	switch locale {
+	case "pt-br":
+		return baseURL + "/blob/main/README-pt.md#-dependências"
+	case "es":
+		return baseURL + "/blob/main/README-es.md#-dependencias"
+	default:
+		return baseURL + "#-dependencies"
+	}
+}
+
 // View renders the wizard
 func (m Model) View() string {
 	if m.finished {
 		return ""
+	}
+
+	// Wait for terminal size
+	if layout.IsWaitingForSize(m.width, m.height) {
+		return locales.T("common.loading")
 	}
 
 	// Check if terminal is too small
@@ -614,30 +718,30 @@ func (m Model) View() string {
 		return layout.RenderTooSmallWarning(m.width, m.height)
 	}
 
+	contentWidth := m.width - 4
+
 	var content string
 	switch m.step {
 	case StepLanguageDeps:
-		content = m.renderLanguageDepsStep()
+		content = m.renderLanguageDepsStep(contentWidth)
 	case StepProvider:
-		content = m.renderProviderStep()
+		content = m.renderProviderStep(contentWidth)
 	case StepDefaults:
-		content = m.renderDefaultsStep()
+		content = m.renderDefaultsStep(contentWidth)
 	}
 
-	safeWidth := layout.SafeWidth(m.width, layout.MinWidth)
-	safeHeight := layout.SafeHeight(m.height, layout.MinHeight)
-	return lipgloss.Place(safeWidth, safeHeight,
-		lipgloss.Center, lipgloss.Top, // Changed from Center to Top for vertical alignment
-		content,
-	)
+	return content
 }
 
 // renderLanguageDepsStep renders step 1: UI Language + Dependencies
-func (m Model) renderLanguageDepsStep() string {
-	const contentWidth = 88
-
+func (m Model) renderLanguageDepsStep(contentWidth int) string {
+	// Progress bar: Step 1/3 = 33%
+	progressWidth := contentWidth - len(locales.T("wizard.title")) - 20
+	filledWidth := progressWidth / 3
+	emptyWidth := progressWidth - filledWidth
+	progressBar := strings.Repeat("█", filledWidth) + strings.Repeat("░", emptyWidth)
 	header := styles.HeaderBorder.Width(contentWidth).Render(
-		fmt.Sprintf(" %s %s [STEP 1/3] ", locales.T("wizard.title"), strings.Repeat("▒", 38)),
+		fmt.Sprintf(" %s %s [STEP 1/3] ", locales.T("wizard.title"), progressBar),
 	)
 
 	// Interface Language panel
@@ -670,6 +774,22 @@ func (m Model) renderLanguageDepsStep() string {
 		} else {
 			depsContent.WriteString("   " + locales.T("wizard.step1.scanning") + "\n")
 		}
+	} else if m.depDownloading {
+		// Show download progress bar
+		depsContent.WriteString(fmt.Sprintf("   ┌── %s ──────────────────────────────────────\n", m.currentDep))
+		depsContent.WriteString("   │   " + locales.T("wizard.step1.status") + ": [" + locales.T("job.downloading") + "]\n")
+		depsContent.WriteString("   │   " + locales.T("job.progress") + ":\n")
+
+		progressWidth := 40
+		filled := int(m.downloadProgress * float64(progressWidth))
+		empty := progressWidth - filled
+		progressBar := strings.Repeat("█", filled) + strings.Repeat("░", empty)
+		percent := int(m.downloadProgress * 100)
+		depsContent.WriteString(fmt.Sprintf("   │   [%s] %d%%\n", progressBar, percent))
+
+		downloadedMB := m.downloadProgress * 48.0 // Assume 48MB total
+		depsContent.WriteString(fmt.Sprintf("   │   %.1fMB / 48.0MB\n", downloadedMB))
+		depsContent.WriteString("   └──────────────────────────────────────────────\n\n")
 	} else {
 		// Show status for each dependency
 		for _, dep := range dependencies.Dependencies {
@@ -700,6 +820,9 @@ func (m Model) renderLanguageDepsStep() string {
 				depsContent.WriteString("   │   " + locales.Tf("wizard.step1.install_manually", dep.Name) + "\n")
 				depsContent.WriteString("   │   \n")
 				depsContent.WriteString("   │   ➤ " + locales.T("wizard.step1.download") + ": " + styles.CodeBlock.Render(dep.GetDownloadURL()) + "\n")
+				depsContent.WriteString("   │   \n")
+				depsContent.WriteString("   │   📖 " + locales.T("wizard.step1.see_readme") + ":\n")
+				depsContent.WriteString("   │      " + styles.Highlight.Render(getReadmeLinkForDependencies()) + "\n")
 			}
 
 			depsContent.WriteString("   └──────────────────────────────────────────────\n\n")
@@ -710,7 +833,8 @@ func (m Model) renderLanguageDepsStep() string {
 
 	var footerText string
 	if !m.checkComplete {
-		footerText = styles.RenderHotkey("Q", locales.T("common.quit")) + strings.Repeat(" ", 35) +
+		spacer := strings.Repeat(" ", max(1, contentWidth-50))
+		footerText = styles.RenderHotkey("Q", locales.T("common.quit")) + spacer +
 			styles.Dimmed.Render("["+locales.T("wizard.step1.checking")+"...]")
 	} else {
 		allOK := true
@@ -722,11 +846,13 @@ func (m Model) renderLanguageDepsStep() string {
 		}
 
 		if allOK {
-			footerText = styles.RenderHotkey("Q", locales.T("common.quit")) + strings.Repeat(" ", 30) +
+			spacer := strings.Repeat(" ", max(1, contentWidth-50))
+			footerText = styles.RenderHotkey("Q", locales.T("common.quit")) + spacer +
 				styles.RenderHotkey("ENTER", locales.T("common.next")+" >")
 		} else {
+			spacer := strings.Repeat(" ", max(1, contentWidth-70))
 			footerText = styles.RenderHotkey("Q", locales.T("common.quit")) + " | " +
-				styles.RenderHotkey("R", locales.T("wizard.step1.recheck")) + strings.Repeat(" ", 20) +
+				styles.RenderHotkey("R", locales.T("wizard.step1.recheck")) + spacer +
 				styles.RenderHotkey("ENTER", locales.T("wizard.step1.skip")+" >")
 		}
 	}
@@ -744,11 +870,14 @@ func (m Model) renderLanguageDepsStep() string {
 }
 
 // renderProviderStep renders step 2: Provider + API Key + Model Selection
-func (m Model) renderProviderStep() string {
-	const contentWidth = 88
-
+func (m Model) renderProviderStep(contentWidth int) string {
+	// Progress bar: Step 2/3 = 66%
+	progressWidth := contentWidth - len(locales.T("wizard.title")) - 20
+	filledWidth := (progressWidth * 2) / 3
+	emptyWidth := progressWidth - filledWidth
+	progressBar := strings.Repeat("█", filledWidth) + strings.Repeat("░", emptyWidth)
 	header := styles.HeaderBorder.Width(contentWidth).Render(
-		fmt.Sprintf(" %s %s [STEP 2/3] ", locales.T("wizard.title"), strings.Repeat("▒", 38)),
+		fmt.Sprintf(" %s %s [STEP 2/3] ", locales.T("wizard.title"), progressBar),
 	)
 
 	providerKeys := []string{
@@ -787,7 +916,7 @@ func (m Model) renderProviderStep() string {
 			if m.focusManager.Mode() == focus.ModeInput {
 				editingStatus = "   " + styles.StatusOK.Render("["+locales.T("wizard.step2.editing")+"]") + " " + styles.KeyHintStyle.Render("[ENTER] "+locales.T("wizard.step2.stop_editing"))
 			} else {
-				editingStatus = "   " + styles.KeyHintStyle.Render("[ENTER] "+locales.T("wizard.step2.start_editing"))
+				editingStatus = "   " + styles.KeyHintStyle.Render("[E] "+locales.T("wizard.step2.start_editing"))
 			}
 		}
 		credContent = fmt.Sprintf("2. %s\n", locales.T("wizard.step2.endpoint_title")) +
@@ -805,11 +934,22 @@ func (m Model) renderProviderStep() string {
 			if m.focusManager.Mode() == focus.ModeInput {
 				editingStatus = "   " + styles.StatusOK.Render("["+locales.T("wizard.step2.editing")+"]") + " " + styles.KeyHintStyle.Render("[ENTER] "+locales.T("wizard.step2.stop_editing")+" | [SPACE] "+showLabel)
 			} else {
-				editingStatus = "   " + styles.KeyHintStyle.Render("[ENTER] "+locales.T("wizard.step2.start_editing")+" | [SPACE] "+showLabel)
+				editingStatus = "   " + styles.KeyHintStyle.Render("[E] "+locales.T("wizard.step2.start_editing")+" | [SPACE] "+showLabel)
+			}
+		}
+		// Show validation status
+		validationStatus := ""
+		if m.apiKeyInput.Value() != "" {
+			if m.validatingKey {
+				validationStatus = "   " + styles.StatusWarning.Render("⏳ "+locales.T("wizard.step1.validating")+"...")
+			} else if m.keyValidated {
+				validationStatus = "   " + styles.StatusOK.Render("✓ "+locales.T("wizard.step1.validation_ok"))
+			} else if m.keyValidationErr != "" {
+				validationStatus = "   " + styles.StatusError.Render("✗ "+m.keyValidationErr)
 			}
 		}
 		credContent = fmt.Sprintf("2. %s\n", locales.T("wizard.step1.credentials_title")) +
-			fmt.Sprintf("   %s > ", locales.T("wizard.step1.api_key_label")) + inputView + "\n" +
+			fmt.Sprintf("   %s > ", locales.T("wizard.step1.api_key_label")) + inputView + validationStatus + "\n" +
 			editingStatus
 	}
 
@@ -819,81 +959,20 @@ func (m Model) renderProviderStep() string {
 	}
 	credPanel := credPanelStyle.Render(credContent)
 
-	// Model selection panel with tabs and table
+	// Model selection panel using reusable component
 	var modelContent strings.Builder
-	modelContent.WriteString(fmt.Sprintf("3. %s\n\n", locales.T("wizard.step2.model_selection_title")))
 
 	if m.loadingModels {
+		modelContent.WriteString(fmt.Sprintf("3. %s\n\n", locales.T("wizard.step2.model_selection_title")))
 		modelContent.WriteString("   " + styles.StatusWarning.Render("⏳ "+locales.T("wizard.step2.loading_models")+"...") + "\n")
-	} else if len(m.availableModels) == 0 {
-		modelContent.WriteString("   " + styles.Dimmed.Render("("+locales.T("wizard.step2.model_selection_hint")+")") + "\n")
 	} else {
-		// Render tabs
-		freeTab := " FREE "
-		allTab := " ALL MODELS "
-		if m.modelTab == 0 {
-			freeTab = styles.StatusOK.Render(" [ FREE ] ")
-			allTab = styles.Dimmed.Render(" ALL MODELS ")
-		} else {
-			freeTab = styles.Dimmed.Render(" FREE ")
-			allTab = styles.StatusOK.Render(" [ ALL MODELS ] ")
-		}
-		modelContent.WriteString("   " + freeTab + allTab + "  " + styles.KeyHintStyle.Render("[← →] Switch") + "\n\n")
+		// Set component width and active state
+		m.modelSelector.SetWidth(contentWidth)
+		// Active when in model section (for navigation)
+		m.modelSelector.SetActive(m.activeSection == 2)
 
-		// Search input (only in ALL MODELS tab)
-		if m.modelTab == 1 {
-			searchView := m.modelSearchInput.View()
-			searchHint := ""
-			// Only show editing status if model section is active
-			if m.activeSection == 2 {
-				if m.focusManager.Mode() == focus.ModeInput {
-					searchHint = " " + styles.StatusOK.Render("[EDITING]") + " [ENTER] Stop"
-				} else {
-					searchHint = " [ENTER] Search"
-				}
-			}
-			modelContent.WriteString("   Search > " + searchView + searchHint + "\n\n")
-		}
-
-		// Table header
-		modelContent.WriteString("   ┌────────────────────────────┬───────────┬──────────────┐\n")
-		modelContent.WriteString("   │ MODEL                      │ CONTEXT   │ PRICE/1M     │\n")
-		modelContent.WriteString("   ├────────────────────────────┼───────────┼──────────────┤\n")
-
-		// Table rows (show 7 rows)
-		models := m.getDisplayModels()
-		if len(models) == 0 {
-			modelContent.WriteString("   │ " + styles.Dimmed.Render("No models found") + strings.Repeat(" ", 55) + "│\n")
-		} else {
-			for i := 0; i < 7 && i+m.modelScrollOffset < len(models); i++ {
-				idx := i + m.modelScrollOffset
-				model := models[idx]
-
-				// Truncate name if too long
-				name := model.Name
-				if len(name) > 26 {
-					name = name[:23] + "..."
-				}
-
-				row := fmt.Sprintf(" %-26s │ %-9s │ %-12s ", name, model.ContextSize, model.PricePerM)
-
-				if idx == m.modelSelection {
-					modelContent.WriteString("   │" + styles.Highlight.Render(row) + "│\n")
-				} else {
-					modelContent.WriteString("   │" + row + "│\n")
-				}
-			}
-		}
-
-		modelContent.WriteString("   └────────────────────────────┴───────────┴──────────────┘\n")
-
-		// Scroll indicator
-		if len(models) > 7 {
-			modelContent.WriteString(fmt.Sprintf("   %s (%d/%d)\n",
-				styles.Dimmed.Render("↑↓ Scroll"),
-				m.modelSelection+1,
-				len(models)))
-		}
+		// Render using component
+		modelContent.WriteString(m.modelSelector.View())
 	}
 
 	modelPanelStyle := styles.Panel.Width(contentWidth)
@@ -902,10 +981,28 @@ func (m Model) renderProviderStep() string {
 	}
 	modelPanel := modelPanelStyle.Render(modelContent.String())
 
-	footer := styles.FooterBorder.Width(contentWidth).Render(
-		styles.RenderHotkey("ESC", "< "+locales.T("common.back")) + strings.Repeat(" ", 30) +
-			styles.RenderHotkey("ENTER", locales.T("common.next_step")+" >"),
-	)
+	// Footer with proper spacing
+	leftText := styles.RenderHotkey("ESC", "< "+locales.T("common.back"))
+	// Show appropriate status for next step
+	var rightText string
+	canProceed := false
+	if m.providerSelection == 3 {
+		// Local LLM: needs endpoint AND validation
+		canProceed = m.apiEndpointInput.Value() != "" && m.keyValidated && !m.validatingKey
+	} else {
+		canProceed = m.apiKeyInput.Value() != "" && m.keyValidated && !m.validatingKey
+	}
+	if canProceed {
+		rightText = styles.RenderHotkey("ENTER", locales.T("common.next_step")+" >")
+	} else if m.validatingKey {
+		rightText = styles.StatusWarning.Render("[ " + locales.T("wizard.step1.validating") + "... ]")
+	} else if !m.keyValidated && (m.apiKeyInput.Value() != "" || (m.providerSelection == 3 && m.apiEndpointInput.Value() != "")) {
+		rightText = styles.KeyHintStyle.Render("[ " + locales.T("wizard.step2.stop_editing") + " " + locales.T("wizard.step1.validation_required") + " ]")
+	} else {
+		rightText = styles.KeyHintStyle.Render("[ " + locales.T("wizard.step1.credentials_title") + " " + locales.T("common.required") + " ]")
+	}
+	footerContent := leftText + strings.Repeat(" ", max(1, contentWidth-lipgloss.Width(leftText)-lipgloss.Width(rightText)-4)) + rightText
+	footer := styles.FooterBorder.Width(contentWidth).Render(footerContent)
 
 	return lipgloss.JoinVertical(lipgloss.Center,
 		header,
@@ -920,11 +1017,12 @@ func (m Model) renderProviderStep() string {
 }
 
 // renderDefaultsStep renders step 3: Target Language + Preferences
-func (m Model) renderDefaultsStep() string {
-	const contentWidth = 88
-
+func (m Model) renderDefaultsStep(contentWidth int) string {
+	// Progress bar: Step 3/3 = 100%
+	progressWidth := contentWidth - len(locales.T("wizard.title")) - 20
+	progressBar := strings.Repeat("█", progressWidth)
 	header := styles.HeaderBorder.Width(contentWidth).Render(
-		fmt.Sprintf(" %s %s [STEP 3/3] ", locales.T("wizard.title"), strings.Repeat("▒", 38)),
+		fmt.Sprintf(" %s %s [STEP 3/3] ", locales.T("wizard.title"), progressBar),
 	)
 
 	languages := []string{
@@ -953,7 +1051,7 @@ func (m Model) renderDefaultsStep() string {
 		if m.focusManager.Mode() == focus.ModeInput {
 			editingHint = " " + styles.StatusOK.Render("["+locales.T("wizard.step2.editing")+"]") + " [ENTER] " + locales.T("wizard.step2.stop_editing")
 		} else {
-			editingHint = " [ENTER] " + locales.T("wizard.step2.start_editing")
+			editingHint = " [E] " + locales.T("wizard.step2.start_editing")
 		}
 		// Show language name if ISO code is recognized
 		langName := getLanguageName(m.customLangCode.Value())
@@ -1009,9 +1107,10 @@ func (m Model) renderDefaultsStep() string {
 			locales.T("wizard.step3.temp_help_high")),
 	)
 
+	spacer := strings.Repeat(" ", max(1, contentWidth-70))
 	footer := styles.FooterBorder.Width(contentWidth).Render(
 		styles.RenderHotkey("ESC", "< "+locales.T("common.back")) + " | " +
-			styles.RenderHotkey("TAB", locales.T("wizard.step3.next_section")) + strings.Repeat(" ", 15) +
+			styles.RenderHotkey("TAB", locales.T("wizard.step3.next_section")) + spacer +
 			styles.RenderHotkey("ENTER", locales.T("common.finish")+" >"),
 	)
 
@@ -1047,8 +1146,8 @@ func (m Model) saveAndFinish() tea.Cmd {
 		m.config.Temperature = m.tempValue
 		m.config.RemoveHITags = m.hiTagsRemoval
 
-		// No default model - user must select from FREE/ALL MODELS tab
-		m.config.Model = "" // Empty until user selects in configuration
+		// Model was already set in handleEnter for StepProvider via modelSelector
+		// No need to set a default here as the component handles selection
 
 		// Set bin path
 		m.config.BinPath = dependencies.BinDir
@@ -1085,6 +1184,12 @@ type finishMsg struct {
 type modelsLoadedMsg struct {
 	models []ModelInfo
 	err    error
+}
+
+// keyValidatedMsg is sent when API key validation completes
+type keyValidatedMsg struct {
+	isValid bool
+	err     error
 }
 
 // Commands
@@ -1127,6 +1232,58 @@ func (m *Model) applyUILanguage() {
 	uiLangs := []string{"en", "pt-br", "es"}
 	if m.uiLanguageSelection < len(uiLangs) {
 		_ = locales.Load(uiLangs[m.uiLanguageSelection])
+	}
+}
+
+// validateKeyCmd validates the API key by making a real API request
+func (m Model) validateKeyCmd() tea.Cmd {
+	return func() tea.Msg {
+		// Create context with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		var provider ai.LLMProvider
+		var err error
+
+		switch m.providerSelection {
+		case 0: // OpenRouter
+			provider = ai.NewOpenRouterAdapter(m.apiKeyInput.Value(), "", 0.3)
+			// First check if key works with a simple request
+			if !provider.ValidateKey(ctx) {
+				return keyValidatedMsg{isValid: false, err: fmt.Errorf("Authentication failed. Please check your API key.")}
+			}
+			// Then try to list models to ensure full access
+			_, err = provider.ListModels(ctx)
+			if err != nil {
+				// If models fail but auth passed, it might be a network issue
+				return keyValidatedMsg{isValid: false, err: fmt.Errorf("API key valid but failed to fetch models: %v", err)}
+			}
+			return keyValidatedMsg{isValid: true, err: nil}
+		case 1: // Gemini
+			provider, err = ai.NewGeminiAdapter(ctx, m.apiKeyInput.Value(), "", 0.3)
+			if err != nil {
+				return keyValidatedMsg{isValid: false, err: err}
+			}
+		case 2: // OpenAI
+			provider = ai.NewOpenAIAdapter(m.apiKeyInput.Value(), "", 0.3)
+		case 3: // Local LLM
+			// For local, just check if endpoint is reachable
+			endpoint := m.apiEndpointInput.Value()
+			if endpoint == "" {
+				return keyValidatedMsg{isValid: false, err: fmt.Errorf("endpoint required")}
+			}
+			provider = ai.NewLocalLLMAdapter(endpoint, "", 0.3)
+		}
+
+		// Try to list models as validation (for non-OpenRouter providers)
+		if provider != nil {
+			_, err = provider.ListModels(ctx)
+			if err != nil {
+				return keyValidatedMsg{isValid: false, err: err}
+			}
+		}
+
+		return keyValidatedMsg{isValid: true, err: nil}
 	}
 }
 
@@ -1186,12 +1343,14 @@ func (m Model) fetchModelsCmd() tea.Cmd {
 			return modelsLoadedMsg{models: models, err: nil}
 
 		case 2: // OpenAI
-			// OpenAI - lista padrão
-			modelStrings := []string{"gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"}
-			return modelsLoadedMsg{
-				models: parseModelsToModelInfo(modelStrings, false),
-				err:    nil,
+			provider = ai.NewOpenAIAdapter(m.apiKeyInput.Value(), "", 0.3)
+			modelStrings, err := provider.ListModels(ctx)
+			if err != nil {
+				// Fallback to static list if API fails
+				modelStrings = []string{"gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"}
 			}
+			models := parseModelsToModelInfo(modelStrings, false)
+			return modelsLoadedMsg{models: models, err: nil}
 		case 3: // Local
 			provider = ai.NewLocalLLMAdapter(m.apiEndpointInput.Value(), "", 0.3)
 			modelStrings, err := provider.ListModels(ctx)
@@ -1216,63 +1375,84 @@ func getLanguageName(code string) string {
 	return ""
 }
 
-// filterModels filters available models based on current tab and search query
-func (m *Model) filterModels() {
-	m.filteredModels = []ModelInfo{}
-	searchQuery := strings.ToLower(strings.TrimSpace(m.modelSearchInput.Value()))
-
-	for _, model := range m.availableModels {
-		// Filter by tab (FREE vs ALL)
-		if m.modelTab == 0 && !model.IsFree {
-			continue
-		}
-
-		// Filter by search (only in ALL tab)
-		if m.modelTab == 1 && searchQuery != "" {
-			nameMatch := strings.Contains(strings.ToLower(model.Name), searchQuery)
-			idMatch := strings.Contains(strings.ToLower(model.ID), searchQuery)
-			if !nameMatch && !idMatch {
-				continue
-			}
-		}
-
-		m.filteredModels = append(m.filteredModels, model)
-	}
-
-	// Reset selection if out of bounds
-	if m.modelSelection >= len(m.filteredModels) {
-		m.modelSelection = 0
-		m.modelScrollOffset = 0
-	}
-}
-
-// getDisplayModels returns the models to display based on current filters
-func (m Model) getDisplayModels() []ModelInfo {
-	if len(m.filteredModels) > 0 {
-		return m.filteredModels
-	}
-
-	// If no filters applied, show based on tab
-	if m.modelTab == 0 {
-		// FREE tab - only free models
-		free := []ModelInfo{}
-		for _, model := range m.availableModels {
-			if model.IsFree {
-				free = append(free, model)
-			}
-		}
-		return free
-	}
-
-	// ALL tab - all models
-	return m.availableModels
-}
-
 // parseModelsToModelInfo converts string list to ModelInfo list with metadata
 func parseModelsToModelInfo(models []string, isFree bool) []ModelInfo {
 	result := []ModelInfo{}
 
-	// Context sizes database
+	for _, modelStr := range models {
+		// Check if model string contains pricing data (format: id|price|context)
+		parts := strings.Split(modelStr, "|")
+
+		var modelID string
+		var pricePerToken string
+		var contextLength string
+
+		if len(parts) >= 3 {
+			// Format: openai/gpt-4|0.00003|8192
+			modelID = parts[0]
+			pricePerToken = parts[1]
+			contextLength = parts[2]
+		} else {
+			// Fallback to old format (just ID)
+			modelID = modelStr
+			pricePerToken = ""
+			contextLength = ""
+		}
+
+		// Calculate price per 1M tokens if we have pricing data
+		var pricePerM string
+		if pricePerToken != "" && pricePerToken != "0" {
+			// Convert string to float
+			var price float64
+			fmt.Sscanf(pricePerToken, "%f", &price)
+			// Convert to price per 1M tokens
+			pricePerMillion := price * 1000000
+			if pricePerMillion < 0.01 {
+				pricePerM = "FREE"
+			} else {
+				pricePerM = fmt.Sprintf("$%.2f", pricePerMillion)
+			}
+		} else {
+			// Fallback to old hardcoded prices
+			pricePerM = getPriceForModel(modelID, isFree)
+		}
+
+		// Determine context size
+		ctx := contextLength
+		if ctx == "" || ctx == "0" {
+			ctx = inferContextSize(modelID)
+		} else {
+			// Format context nicely (8192 -> 8k, 128000 -> 128k, etc)
+			var ctxInt int
+			fmt.Sscanf(ctx, "%d", &ctxInt)
+			if ctxInt >= 1000000 {
+				ctx = fmt.Sprintf("%dM", ctxInt/1000000)
+			} else if ctxInt >= 1000 {
+				ctx = fmt.Sprintf("%dk", ctxInt/1000)
+			}
+		}
+
+		// Force free if ID contains :free tag, regardless of price calculation
+		modelIsFree := isFree || pricePerM == "FREE" || strings.Contains(strings.ToLower(modelID), ":free")
+
+		// If marked as free, ensure price is "FREE"
+		if modelIsFree && pricePerM != "FREE" {
+			pricePerM = "FREE"
+		}
+
+		result = append(result, ModelInfo{
+			ID:          modelID,
+			Name:        modelID,
+			ContextSize: ctx,
+			PricePerM:   pricePerM,
+			IsFree:      modelIsFree,
+		})
+	}
+	return result
+}
+
+// inferContextSize tries to infer context size from model name
+func inferContextSize(modelID string) string {
 	contextSizes := map[string]string{
 		"gpt-4o":           "128k",
 		"gpt-4o-mini":      "128k",
@@ -1281,12 +1461,13 @@ func parseModelsToModelInfo(models []string, isFree bool) []ModelInfo {
 		"gemini-1.5-pro":   "1M",
 		"gemini-1.5-flash": "1M",
 		"gemini-2.0-flash": "1M",
+		"gemini-2.5":       "1M",
 		"claude-3-opus":    "200k",
 		"claude-3-sonnet":  "200k",
 		"claude-3-haiku":   "200k",
-		"llama-3":          "8k",
-		"llama-3.1":        "128k",
 		"llama-3.3":        "128k",
+		"llama-3.1":        "128k",
+		"llama-3":          "8k",
 		"mistral":          "32k",
 		"mixtral":          "32k",
 		"qwen":             "32k",
@@ -1294,25 +1475,13 @@ func parseModelsToModelInfo(models []string, isFree bool) []ModelInfo {
 		"gemma":            "8k",
 	}
 
-	for _, model := range models {
-		// Determine context size
-		ctx := "varies"
-		for key, size := range contextSizes {
-			if strings.Contains(strings.ToLower(model), key) {
-				ctx = size
-				break
-			}
+	lowerID := strings.ToLower(modelID)
+	for key, size := range contextSizes {
+		if strings.Contains(lowerID, key) {
+			return size
 		}
-
-		result = append(result, ModelInfo{
-			ID:          model,
-			Name:        model,
-			ContextSize: ctx,
-			PricePerM:   getPriceForModel(model, isFree),
-			IsFree:      isFree,
-		})
 	}
-	return result
+	return "varies"
 }
 
 // getPriceForModel returns a price string for a given model
@@ -1321,27 +1490,59 @@ func getPriceForModel(modelID string, isFree bool) string {
 		return "FREE"
 	}
 
-	// Common model pricing (approximations)
-	prices := map[string]string{
-		"gpt-4o":           "$2.50",
-		"gpt-4o-mini":      "$0.15",
-		"gpt-4-turbo":      "$10.00",
-		"gpt-3.5-turbo":    "$0.50",
-		"gemini-1.5-pro":   "$1.25",
-		"gemini-1.5-flash": "$0.07",
-		"claude-3-opus":    "$15.00",
-		"claude-3-sonnet":  "$3.00",
-		"claude-3-haiku":   "$0.25",
+	lowerID := strings.ToLower(modelID)
+
+	// Common model pricing - ordered from most specific to least specific
+	// This order matters to avoid "gpt-4o" matching before "gpt-4o-mini"
+	priceList := []struct {
+		key   string
+		price string
+	}{
+		// OpenAI - most specific first
+		{"gpt-4o-mini", "$0.15"},
+		{"gpt-4o", "$2.50"},
+		{"gpt-4-turbo", "$10.00"},
+		{"gpt-4", "$30.00"},
+		{"gpt-3.5-turbo", "$0.50"},
+		// Google Gemini - all variations
+		{"gemini-2.5-flash", "$0.07"},
+		{"gemini-2.5-pro", "$1.25"},
+		{"gemini-2-flash", "$0.07"},
+		{"gemini-2-pro", "$1.25"},
+		{"gemini-1.5-flash", "$0.07"},
+		{"gemini-1.5-pro", "$1.25"},
+		{"gemini-flash", "$0.07"},
+		{"gemini-pro", "$1.25"},
+		{"gemini-3-pro", "$1.25"},
+		// Anthropic Claude
+		{"claude-3.5-sonnet", "$3.00"},
+		{"claude-3-opus", "$15.00"},
+		{"claude-3-sonnet", "$3.00"},
+		{"claude-3-haiku", "$0.25"},
+		// Meta Llama
+		{"llama-3.3-70b", "$0.59"},
+		{"llama-3.1-405b", "$3.00"},
+		{"llama-3.1-70b", "$0.59"},
+		{"llama-3.1-8b", "$0.06"},
+		{"llama-70b", "$0.59"},
+		{"llama-8b", "$0.06"},
+		// Others
+		{"qwen-2.5-72b", "$0.35"},
+		{"mistral-7b", "$0.06"},
+		{"mixtral-8x7b", "$0.24"},
+		{"phi-3-medium", "$0.14"},
+		{"gemma-2-9b", "$0.08"},
 	}
 
-	// Check for partial matches
-	for key, price := range prices {
-		if strings.Contains(strings.ToLower(modelID), key) {
-			return price
+	// Check matches in order (most specific first)
+	for _, p := range priceList {
+		if strings.Contains(lowerID, p.key) {
+			return p.price
 		}
 	}
 
-	return "$?.??"
+	// Default for unknown models
+	return "$0.50"
 }
 
 // Finished returns true if the wizard is complete

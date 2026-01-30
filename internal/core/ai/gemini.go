@@ -190,12 +190,34 @@ func (g *GeminiAdapter) ListModels(ctx context.Context) ([]string, error) {
 
 	resp, err := g.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, &ProviderError{
+			Provider: "gemini",
+			Code:     "network_error",
+			Message:  err.Error(),
+			Retry:    true,
+		}
 	}
 	defer resp.Body.Close()
 
+	// Check for authentication errors
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &ProviderError{
+			Provider: "gemini",
+			Code:     "invalid_key",
+			Message:  fmt.Sprintf("Invalid API key: %s", string(body)),
+			Retry:    false,
+		}
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &ProviderError{
+			Provider: "gemini",
+			Code:     "http_error",
+			Message:  fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body)),
+			Retry:    resp.StatusCode >= 500,
+		}
 	}
 
 	// Parse models response

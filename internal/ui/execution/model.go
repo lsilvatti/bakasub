@@ -1,7 +1,9 @@
 package execution
 
 import (
+	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -10,6 +12,11 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lsilvatti/bakasub/internal/config"
+	"github.com/lsilvatti/bakasub/internal/core/ai"
+	"github.com/lsilvatti/bakasub/internal/core/db"
+	"github.com/lsilvatti/bakasub/internal/core/pipeline"
+	"github.com/lsilvatti/bakasub/internal/locales"
 	"github.com/lsilvatti/bakasub/internal/ui/components/tape"
 	"github.com/lsilvatti/bakasub/internal/ui/layout"
 	"github.com/lsilvatti/bakasub/internal/ui/styles"
@@ -205,14 +212,56 @@ const (
 	StatusRunning JobStatus = iota
 	StatusPaused
 	StatusCancelling
+	StatusQualityGate // Waiting for user decision on quality issues
 	StatusComplete
 	StatusFailed
 )
+
+// QualityIssue represents a single linter issue for display
+type QualityIssue struct {
+	LineID   int
+	Severity string // "HIGH", "MED", "LOW"
+	Type     string
+	Content  string
+}
+
+// JobConfig holds the job configuration passed from job setup
+type JobConfig struct {
+	InputPath       string
+	Files           []AnalyzedFile
+	BatchMode       bool
+	SourceLang      string
+	TargetLang      string
+	MediaType       string
+	AIModel         string
+	Temperature     float64
+	GlossaryPath    string
+	GlossaryTerms   map[string]string
+	RemoveHITags    bool
+	MuxMode         string
+	SetDefault      bool
+	BackupOriginal  bool
+	ExtractFonts    bool
+	AutoDetectTrack bool
+}
+
+// AnalyzedFile represents a file to process
+type AnalyzedFile struct {
+	Path            string
+	Filename        string
+	SelectedTrackID int
+}
 
 // Model represents the execution screen state
 type Model struct {
 	width  int
 	height int
+
+	// Configuration
+	cfg       *config.Config
+	jobConfig JobConfig
+	ctx       context.Context
+	cancel    context.CancelFunc
 
 	// Job info
 	jobName       string
@@ -231,6 +280,11 @@ type Model struct {
 	costSoFar      float64
 	errors         int
 
+	// Quality Gate
+	qualityIssues   []QualityIssue
+	qualityAction   int // 0=auto-fix, 1=manual review, 2=ignore
+	showQualityGate bool
+
 	// Logging
 	logBuffer    *LogBuffer
 	viewport     viewport.Model
@@ -240,12 +294,15 @@ type Model struct {
 	// Live Translation View (Cassette Tape)
 	tapeView tape.Model
 
+	// Message channel for async updates
+	msgChan chan tea.Msg
+
 	// Control
 	quitting bool
 }
 
 // New creates a new execution screen model
-func New(jobName string, totalFiles int) Model {
+func New(cfg *config.Config, jobConfig JobConfig) Model {
 	vp := viewport.New(80, 20)
 	vp.Style = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -254,9 +311,25 @@ func New(jobName string, totalFiles int) Model {
 
 	tapeView := tape.NewModel(80, 12)
 
+	jobName := jobConfig.InputPath
+	if len(jobConfig.Files) > 0 {
+		jobName = filepath.Base(jobConfig.Files[0].Path)
+	}
+
+	totalFiles := len(jobConfig.Files)
+	if totalFiles == 0 {
+		totalFiles = 1
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
 	return Model{
-		width:        80,
-		height:       24,
+		width:        0, // Will be set by WindowSizeMsg
+		height:       0, // Will be set by WindowSizeMsg
+		cfg:          cfg,
+		jobConfig:    jobConfig,
+		ctx:          ctx,
+		cancel:       cancel,
 		jobName:      jobName,
 		totalFiles:   totalFiles,
 		fileIndex:    1,
@@ -267,13 +340,197 @@ func New(jobName string, totalFiles int) Model {
 		autoScroll:   true,
 		lastLogCount: 0,
 		tapeView:     tapeView,
+		msgChan:      make(chan tea.Msg, 100), // Buffered channel for async messages
 	}
 }
 
-// Init initializes the execution screen
+// Init initializes the execution screen and starts the pipeline
 func (m Model) Init() tea.Cmd {
-	return nil
+	// Request terminal size and start execution pipeline
+	return tea.Batch(
+		tea.WindowSize(),
+		m.startExecution(),
+		m.listenForMessages(),
+	)
 }
+
+// listenForMessages creates a command that listens for async messages from the pipeline
+func (m Model) listenForMessages() tea.Cmd {
+	return func() tea.Msg {
+		msg, ok := <-m.msgChan
+		if !ok {
+			return nil
+		}
+		return msg
+	}
+}
+
+// startExecution creates a command that runs the translation pipeline
+func (m Model) startExecution() tea.Cmd {
+	return func() tea.Msg {
+		// Add initial log
+		return LogMsg{Level: LogInfo, Message: "Starting translation pipeline..."}
+	}
+}
+
+// executePipeline runs the translation pipeline and returns progress messages
+func (m *Model) executePipeline() tea.Cmd {
+	cfg := m.cfg
+	jobConfig := m.jobConfig
+	ctx := m.ctx
+	msgChan := m.msgChan
+
+	return func() tea.Msg {
+		// Run pipeline in background goroutine
+		go func() {
+			// Check if we have files to process
+			files := jobConfig.Files
+			if len(files) == 0 {
+				// Single file mode - use InputPath directly
+				if jobConfig.InputPath == "" {
+					msgChan <- pipelineErrorMsg{err: fmt.Errorf("no files to process")}
+					return
+				}
+				files = []AnalyzedFile{{
+					Path:            jobConfig.InputPath,
+					Filename:        filepath.Base(jobConfig.InputPath),
+					SelectedTrackID: -1,
+				}}
+			}
+
+			// Log file count
+			msgChan <- LogMsg{Level: LogInfo, Message: fmt.Sprintf("Processing %d file(s)...", len(files))}
+
+			// Create AI provider
+			provider, err := ai.NewProvider(cfg)
+			if err != nil {
+				msgChan <- pipelineErrorMsg{err: fmt.Errorf("failed to create AI provider: %w", err)}
+				return
+			}
+
+			// Open cache database (optional)
+			cache, cacheErr := db.Open("")
+			if cacheErr != nil {
+				msgChan <- LogMsg{Level: LogWarn, Message: "Cache unavailable, continuing without cache"}
+			} else {
+				msgChan <- LogMsg{Level: LogInfo, Message: "Translation cache connected"}
+			}
+			defer func() {
+				if cache != nil {
+					cache.Close()
+				}
+			}()
+
+			totalFiles := len(files)
+
+			// Process each file
+			for i, file := range files {
+				if ctx.Err() != nil {
+					msgChan <- pipelineCancelledMsg{}
+					return
+				}
+
+				// Update progress
+				msgChan <- ProgressMsg{
+					FileProgress:  0,
+					BatchProgress: float64(i) / float64(totalFiles) * 100,
+					CurrentFile:   file.Filename,
+				}
+
+				msgChan <- LogMsg{Level: LogInfo, Message: fmt.Sprintf("Starting file %d/%d: %s", i+1, totalFiles, file.Filename)}
+
+				// Determine output path based on mux mode
+				outputPath := file.Path
+				if jobConfig.MuxMode == "new-file" {
+					// Create new file with suffix
+					ext := filepath.Ext(file.Path)
+					base := strings.TrimSuffix(file.Path, ext)
+					outputPath = base + "_translated" + ext
+				}
+
+				// Create pipeline config for this file
+				pipelineCfg := &pipeline.PipelineConfig{
+					InputPath:      file.Path,
+					OutputPath:     outputPath,
+					SourceLang:     "auto",
+					TargetLang:     jobConfig.TargetLang,
+					Model:          jobConfig.AIModel,
+					Temperature:    jobConfig.Temperature,
+					BatchSize:      50,
+					RemoveHI:       jobConfig.RemoveHITags,
+					Glossary:       jobConfig.GlossaryTerms,
+					TrackID:        file.SelectedTrackID,
+					MuxMode:        jobConfig.MuxMode,
+					BackupOriginal: jobConfig.BackupOriginal,
+				}
+
+				p := pipeline.New(provider, cache, pipelineCfg)
+
+				// Set up logging callback to send logs to UI
+				p.LogCallback = func(logMsg string) {
+					level := LogInfo
+					if strings.Contains(logMsg, "ERROR") || strings.Contains(logMsg, "failed") {
+						level = LogError
+					} else if strings.Contains(logMsg, "WARN") || strings.Contains(logMsg, "Warning") {
+						level = LogWarn
+					} else if strings.Contains(logMsg, "[AI]") {
+						level = LogAI
+					}
+					select {
+					case msgChan <- LogMsg{Level: level, Message: logMsg}:
+					default:
+						// Channel full, skip message
+					}
+				}
+
+				// Set up progress callback
+				p.ProgressCallback = func(current, total int) {
+					progress := float64(current) / float64(total) * 100
+					select {
+					case msgChan <- ProgressMsg{
+						FileProgress:  progress,
+						BatchProgress: (float64(i) + float64(current)/float64(total)) / float64(totalFiles) * 100,
+						CurrentFile:   file.Filename,
+					}:
+					default:
+						// Channel full, skip message
+					}
+				}
+
+				// Execute pipeline for this file
+				if err := p.Execute(ctx); err != nil {
+					msgChan <- pipelineErrorMsg{err: err, fileIndex: i}
+					return
+				}
+
+				// File completed
+				msgChan <- LogMsg{Level: LogSuccess, Message: fmt.Sprintf("Completed: %s", file.Filename)}
+				msgChan <- ProgressMsg{
+					FileProgress:  100,
+					BatchProgress: float64(i+1) / float64(totalFiles) * 100,
+					CurrentFile:   file.Filename,
+				}
+			}
+
+			msgChan <- pipelineCompleteMsg{}
+		}()
+
+		// Return nil to not block - updates come through listenForMessages
+		return nil
+	}
+}
+
+// pipelineErrorMsg is sent when pipeline encounters an error
+type pipelineErrorMsg struct {
+	err       error
+	fileIndex int
+}
+
+// pipelineCancelledMsg is sent when pipeline is cancelled
+type pipelineCancelledMsg struct{}
+
+// pipelineCompleteMsg is sent when pipeline finishes successfully
+type pipelineCompleteMsg struct{}
 
 // LogMsg is sent when a new log line is added
 type LogMsg struct {
@@ -308,17 +565,41 @@ type TranslationMsg struct {
 	Translated   string
 }
 
+// CompletedMsg is sent to parent when execution completes
+type CompletedMsg struct {
+	Success bool
+	Error   error
+}
+
+// QualityGateMsg is sent when linter finds issues that need user decision
+type QualityGateMsg struct {
+	Issues []QualityIssue
+}
+
+// QualityDecisionMsg is sent when user makes a decision on quality issues
+type QualityDecisionMsg struct {
+	Action int // 0=auto-fix, 1=manual review, 2=ignore
+}
+
 // Update handles messages and updates the model
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle Quality Gate modal input first
+		if m.showQualityGate {
+			return m.handleQualityGateInput(msg)
+		}
+
 		if m.status == StatusComplete || m.status == StatusFailed {
-			// Allow quitting when done
-			if key.Matches(msg, keys.Quit) {
+			// Allow returning to dashboard when done
+			if key.Matches(msg, keys.Quit) || msg.String() == "esc" || msg.String() == "enter" {
 				m.quitting = true
-				return m, tea.Quit
+				// Send CompletedMsg to parent (dashboard)
+				return m, func() tea.Msg {
+					return CompletedMsg{Success: m.status == StatusComplete, Error: nil}
+				}
 			}
 		}
 
@@ -326,7 +607,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, keys.Cancel):
 			if m.status == StatusRunning || m.status == StatusPaused {
 				m.status = StatusCancelling
+				m.cancel() // Cancel the context to stop the pipeline
 				m.logBuffer.AddLine(LogWarn, "Cancelling job...")
+				m.viewport.SetContent(m.logBuffer.GetRawText())
+				if m.autoScroll {
+					m.viewport.GotoBottom()
+				}
 			}
 		case key.Matches(msg, keys.Pause):
 			if m.status == StatusRunning {
@@ -364,6 +650,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.autoScroll = true
 		}
 
+	case QualityGateMsg:
+		m.qualityIssues = msg.Issues
+		m.showQualityGate = true
+		m.status = StatusQualityGate
+		m.qualityAction = 0 // Default to auto-fix
+		// Continue listening for more messages (quality gate decisions will be handled)
+		return m, m.listenForMessages()
+
 	case LogMsg:
 		m.logBuffer.AddLine(msg.Level, msg.Message)
 		// Update viewport content
@@ -372,20 +666,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.autoScroll {
 			m.viewport.GotoBottom()
 		}
+		// After initial log, start the actual pipeline execution
+		if msg.Message == "Starting translation pipeline..." {
+			return m, tea.Batch(m.executePipeline(), m.listenForMessages())
+		}
+		// Continue listening for more messages
+		return m, m.listenForMessages()
 
 	case ProgressMsg:
 		m.fileProgress = msg.FileProgress
 		m.batchProgress = msg.BatchProgress
 		m.currentFile = msg.CurrentFile
+		// Update tape progress
+		m.tapeView.SetProgress(m.fileProgress)
+		// Continue listening for more messages
+		return m, m.listenForMessages()
 
 	case StatsMsg:
 		m.linesProcessed = msg.LinesProcessed
 		m.tokensUsed = msg.TokensUsed
 		m.costSoFar = msg.CostSoFar
 		m.errors = msg.Errors
+		// Continue listening for more messages
+		return m, m.listenForMessages()
 
 	case StatusMsg:
 		m.status = msg.Status
+		// Continue listening for more messages
+		return m, m.listenForMessages()
 
 	case TranslationMsg:
 		// Add translation pair to tape view
@@ -396,6 +704,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 		// Update tape progress based on file progress
 		m.tapeView.SetProgress(m.fileProgress)
+		// Continue listening for more messages
+		return m, m.listenForMessages()
+
+	case pipelineCompleteMsg:
+		m.status = StatusComplete
+		m.logBuffer.AddLine(LogSuccess, "Translation complete!")
+		m.viewport.SetContent(m.logBuffer.GetRawText())
+		if m.autoScroll {
+			m.viewport.GotoBottom()
+		}
+		return m, nil
+
+	case pipelineErrorMsg:
+		m.status = StatusFailed
+		m.errors++
+		m.logBuffer.AddLine(LogError, fmt.Sprintf("Pipeline error: %v", msg.err))
+		m.viewport.SetContent(m.logBuffer.GetRawText())
+		if m.autoScroll {
+			m.viewport.GotoBottom()
+		}
+		return m, nil
+
+	case pipelineCancelledMsg:
+		m.status = StatusFailed
+		m.logBuffer.AddLine(LogWarn, "Pipeline cancelled by user")
+		m.viewport.SetContent(m.logBuffer.GetRawText())
+		if m.autoScroll {
+			m.viewport.GotoBottom()
+		}
+		return m, nil
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -448,13 +786,25 @@ func (m *Model) SetSize(width, height int) {
 
 // View renders the execution screen
 func (m Model) View() string {
+	// Wait for terminal size
+	if layout.IsWaitingForSize(m.width, m.height) {
+		return locales.T("common.loading")
+	}
+
 	// Check if terminal is too small
 	if layout.IsTooSmall(m.width, m.height) {
 		return layout.RenderTooSmallWarning(m.width, m.height)
 	}
 
-	header := m.renderHeader()
-	progress := m.renderProgress()
+	// Show Quality Gate modal if active
+	if m.showQualityGate {
+		return m.renderQualityGate()
+	}
+
+	contentWidth := m.width - 4
+
+	header := m.renderHeader(contentWidth)
+	progress := m.renderProgress(contentWidth)
 	tapeView := m.renderTape()
 	logs := m.renderLogs()
 	footer := m.renderFooter()
@@ -472,11 +822,27 @@ func (m Model) View() string {
 		footer,
 	)
 
-	contentWidth := layout.SafeWidth(m.width-4, 76)
 	return styles.MainWindow.Width(contentWidth).Render(content)
 }
 
-func (m Model) renderHeader() string {
+// calculateETA returns the estimated time remaining based on progress
+func (m Model) calculateETA() time.Duration {
+	if m.batchProgress <= 0 {
+		return 0
+	}
+	elapsed := time.Since(m.startTime)
+	progress := m.batchProgress
+	if progress > 100 {
+		progress = 100
+	}
+	if progress >= 100 {
+		return 0
+	}
+	remaining := float64(elapsed) * (100 - progress) / progress
+	return time.Duration(remaining)
+}
+
+func (m Model) renderHeader(contentWidth int) string {
 	// Status indicator
 	var statusStr string
 	var statusColor lipgloss.Color
@@ -497,25 +863,25 @@ func (m Model) renderHeader() string {
 	case StatusFailed:
 		statusStr = "[✗ FAILED]"
 		statusColor = lipgloss.Color("#FF0000")
+	case StatusQualityGate:
+		statusStr = "[⚠ QUALITY CHECK]"
+		statusColor = lipgloss.Color("#FFFF00")
 	}
 
 	statusStyle := lipgloss.NewStyle().Foreground(statusColor).Bold(true)
 
-	// Calculate elapsed time
-	if m.status == StatusRunning || m.status == StatusPaused {
-		m.elapsedTime = time.Since(m.startTime)
-	}
-
-	elapsed := fmt.Sprintf("%02d:%02d:%02d",
-		int(m.elapsedTime.Hours()),
-		int(m.elapsedTime.Minutes())%60,
-		int(m.elapsedTime.Seconds())%60,
+	// Calculate ETA (estimated time remaining)
+	eta := m.calculateETA()
+	etaStr := fmt.Sprintf("%02d:%02d:%02d",
+		int(eta.Hours()),
+		int(eta.Minutes())%60,
+		int(eta.Seconds())%60,
 	)
 
 	title := styles.TitleStyle.Render(fmt.Sprintf("JOB RUNNING: %s", m.jobName))
-	status := statusStyle.Render(statusStr) + " [ETA: " + elapsed + "]"
+	status := statusStyle.Render(statusStr) + " [ETA: " + etaStr + "]"
 
-	headerBar := strings.Repeat("▒", layout.SafeWidth(m.width-6, 70))
+	headerBar := strings.Repeat("▒", contentWidth-4)
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -526,10 +892,14 @@ func (m Model) renderHeader() string {
 	)
 }
 
-func (m Model) renderProgress() string {
+func (m Model) renderProgress(contentWidth int) string {
 	// File progress
-	fileBar := layout.ProgressBar(int(m.fileProgress), 100, 50)
-	fileInfo := fmt.Sprintf("FILE: %s (%d/%d)", m.currentFile, m.fileIndex, m.totalFiles)
+	barWidth := contentWidth - 20
+	if barWidth < 30 {
+		barWidth = 30
+	}
+	fileBar := layout.ProgressBar(int(m.fileProgress), 100, barWidth)
+	fileInfo := fmt.Sprintf("%s %s (%d/%d)", locales.T("execution.file_label"), m.currentFile, m.fileIndex, m.totalFiles)
 	fileProgress := lipgloss.JoinVertical(
 		lipgloss.Left,
 		fileInfo,
@@ -538,10 +908,10 @@ func (m Model) renderProgress() string {
 	)
 
 	// Batch progress
-	batchBar := layout.ProgressBar(int(m.batchProgress), 100, 50)
+	batchBar := layout.ProgressBar(int(m.batchProgress), 100, barWidth)
 	batchProgress := lipgloss.JoinVertical(
 		lipgloss.Left,
-		fmt.Sprintf("BATCH: %d/%d Files", m.fileIndex, m.totalFiles),
+		fmt.Sprintf("%s %d/%d Files", locales.T("execution.batch_label"), m.fileIndex, m.totalFiles),
 		batchBar,
 		fmt.Sprintf("%.0f%%", m.batchProgress),
 	)
@@ -549,10 +919,10 @@ func (m Model) renderProgress() string {
 	// Statistics
 	stats := lipgloss.JoinVertical(
 		lipgloss.Left,
-		fmt.Sprintf("LINES: %d", m.linesProcessed),
-		fmt.Sprintf("TOKENS: %s", formatNumber(m.tokensUsed)),
-		fmt.Sprintf("COST: $%.4f", m.costSoFar),
-		fmt.Sprintf("ERRORS: %d", m.errors),
+		fmt.Sprintf("%s %d", locales.T("execution.stats.lines"), m.linesProcessed),
+		fmt.Sprintf("%s %s", locales.T("execution.stats.tokens"), formatNumber(m.tokensUsed)),
+		fmt.Sprintf("%s $%.4f", locales.T("execution.stats.cost"), m.costSoFar),
+		fmt.Sprintf("%s %d", locales.T("execution.stats.errors"), m.errors),
 	)
 
 	panelWidth := layout.CalculateThird(m.width, 6)
@@ -610,6 +980,106 @@ func (m Model) renderLogs() string {
 		"",
 		m.viewport.View(),
 	)
+}
+
+func (m Model) handleQualityGateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if m.qualityAction > 0 {
+			m.qualityAction--
+		}
+	case "down", "j":
+		if m.qualityAction < 2 {
+			m.qualityAction++
+		}
+	case "enter":
+		m.showQualityGate = false
+		m.status = StatusRunning
+		return m, func() tea.Msg {
+			return QualityDecisionMsg{Action: m.qualityAction}
+		}
+	case "esc":
+		// Ignore and continue
+		m.showQualityGate = false
+		m.status = StatusRunning
+		return m, func() tea.Msg {
+			return QualityDecisionMsg{Action: 2} // Ignore
+		}
+	}
+	return m, nil
+}
+
+func (m Model) renderQualityGate() string {
+	var s strings.Builder
+
+	s.WriteString(styles.TitleStyle.Render(locales.T("quality_gate.title")))
+	s.WriteString("\n\n")
+	s.WriteString(styles.Dimmed.Render(locales.T("quality_gate.description")))
+	s.WriteString("\n")
+	s.WriteString(styles.Dimmed.Render(locales.T("quality_gate.review_before_mux")))
+	s.WriteString("\n\n")
+
+	// Render issues section with Panel
+	var issuesContent strings.Builder
+	issuesContent.WriteString(styles.SectionStyle.Render(locales.T("quality_gate.detected_issues")) + "\n\n")
+	issuesContent.WriteString("   ID    SEVERITY    ISSUE TYPE             CONTENT\n")
+	issuesContent.WriteString("   " + strings.Repeat("─", 64) + "\n")
+
+	maxIssues := 5
+	if len(m.qualityIssues) < maxIssues {
+		maxIssues = len(m.qualityIssues)
+	}
+
+	for i := 0; i < maxIssues; i++ {
+		issue := m.qualityIssues[i]
+		sevStyle := styles.StatusWarning
+		if issue.Severity == "HIGH" {
+			sevStyle = styles.StatusError
+		} else if issue.Severity == "LOW" {
+			sevStyle = styles.Dimmed
+		}
+
+		content := issue.Content
+		if len(content) > 35 {
+			content = content[:32] + "..."
+		}
+
+		issuesContent.WriteString(fmt.Sprintf("   %-5d %s    %-20s %s\n",
+			issue.LineID,
+			sevStyle.Render(fmt.Sprintf("[%-4s]", issue.Severity)),
+			issue.Type,
+			content,
+		))
+	}
+
+	if len(m.qualityIssues) > maxIssues {
+		issuesContent.WriteString(fmt.Sprintf("   ... and %d more issues\n", len(m.qualityIssues)-maxIssues))
+	}
+	s.WriteString(styles.Panel.Render(issuesContent.String()))
+	s.WriteString("\n\n")
+
+	// Action selection with Panel
+	var actionContent strings.Builder
+	actionContent.WriteString(styles.SectionStyle.Render("ACTION (Select with Arrows)") + "\n\n")
+
+	actions := []string{
+		locales.T("quality_gate.auto_fix"),
+		locales.T("quality_gate.manual_review"),
+		locales.T("quality_gate.ignore_continue"),
+	}
+
+	for i, action := range actions {
+		icon := "( )"
+		if i == m.qualityAction {
+			icon = "(o)"
+		}
+		actionContent.WriteString(fmt.Sprintf("   %s %s\n", styles.Highlight.Render(icon), action))
+	}
+	s.WriteString(styles.Panel.Render(actionContent.String()))
+	s.WriteString("\n\n")
+	s.WriteString(styles.KeyHintStyle.Render("[ENTER]") + " EXECUTE")
+
+	return styles.ModalStyle.Width(78).Render(s.String())
 }
 
 func (m Model) renderFooter() string {

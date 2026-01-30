@@ -2,6 +2,7 @@ package styles
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -98,6 +99,12 @@ var (
 			BorderForeground(Cyan).
 			Padding(0, 1)
 
+	// ModalStyle - Modal/Dialog styling with double border
+	ModalStyle = lipgloss.NewStyle().
+			Border(DoubleBorder).
+			BorderForeground(NeonPink).
+			Padding(1, 2)
+
 	// ProgressBarFilled - Block character █ style
 	ProgressBarFilled = lipgloss.NewStyle().
 				Foreground(Cyan)
@@ -170,6 +177,11 @@ var (
 	// DisabledStyle - Disabled UI elements
 	DisabledStyle = lipgloss.NewStyle().
 			Foreground(DarkGray)
+
+	// AccentStyle - Accent/highlight for interactive elements
+	AccentStyle = lipgloss.NewStyle().
+			Foreground(Cyan).
+			Bold(true)
 )
 
 // Helper Functions
@@ -210,4 +222,92 @@ func RenderProgressBar(current, total int, width int) string {
 // AdaptToSize adjusts a style's width/height dynamically
 func AdaptToSize(style lipgloss.Style, width, height int) lipgloss.Style {
 	return style.Width(width).Height(height)
+}
+
+// RenderDimmedOverlay creates a dimmed background effect using block characters
+// This is used for modal overlays to indicate background is inactive
+func RenderDimmedOverlay(width, height int) string {
+	var lines []string
+	dimChar := "▒"
+	line := strings.Repeat(dimChar, width)
+	dimStyle := lipgloss.NewStyle().Foreground(DarkGray)
+
+	for i := 0; i < height; i++ {
+		lines = append(lines, dimStyle.Render(line))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// RenderModalWithOverlay renders a modal centered over a dimmed background
+func RenderModalWithOverlay(modal string, width, height int) string {
+	overlay := RenderDimmedOverlay(width, height)
+	modalLines := strings.Split(modal, "\n")
+
+	// Calculate center position
+	modalHeight := len(modalLines)
+	modalWidth := 0
+	for _, line := range modalLines {
+		if len(line) > modalWidth {
+			modalWidth = len(line)
+		}
+	}
+
+	startY := (height - modalHeight) / 2
+	startX := (width - modalWidth) / 2
+
+	if startY < 0 {
+		startY = 0
+	}
+	if startX < 0 {
+		startX = 0
+	}
+
+	// Overlay the modal on the dimmed background
+	overlayLines := strings.Split(overlay, "\n")
+	for i, line := range modalLines {
+		lineIdx := startY + i
+		if lineIdx >= 0 && lineIdx < len(overlayLines) {
+			// Replace portion of overlay with modal line
+			padding := strings.Repeat(" ", startX)
+			overlayLines[lineIdx] = padding + line
+		}
+	}
+
+	return strings.Join(overlayLines, "\n")
+}
+
+// DenseTableStyles returns table styles with minimal padding for btop aesthetic
+func DenseTableStyles() (lipgloss.Style, lipgloss.Style, lipgloss.Style) {
+	// Header style: bold, colored, minimal padding
+	headerStyle := lipgloss.NewStyle().
+		Foreground(Yellow).
+		Bold(true).
+		Padding(0, 1)
+
+	// Cell style: minimal padding
+	cellStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Padding(0, 1)
+
+	// Selected cell style: highlighted
+	selectedStyle := lipgloss.NewStyle().
+		Foreground(NeonPink).
+		Background(DarkGray).
+		Bold(true).
+		Padding(0, 1)
+
+	return headerStyle, cellStyle, selectedStyle
+}
+
+// RenderSection creates a styled section box with title using Panel border
+func RenderSection(title string, content string) string {
+	titleLine := SectionStyle.Render(title)
+	fullContent := "\n" + titleLine + "\n\n" + content + "\n"
+	return Panel.Render(fullContent)
+}
+
+// RenderInfoBox creates a simple info box with rounded border
+func RenderInfoBox(content string) string {
+	return Panel.Render(content)
 }

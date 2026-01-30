@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/lsilvatti/bakasub/internal/locales"
 	"github.com/lsilvatti/bakasub/internal/ui/styles"
 )
 
@@ -32,6 +33,9 @@ const (
 	ModeDelete
 	ModeAdd
 )
+
+// ClosedMsg is sent when the attachment manager should be closed
+type ClosedMsg struct{}
 
 type Model struct {
 	table        table.Model
@@ -68,6 +72,21 @@ func New(mkvPath string) (*Model, error) {
 		table.WithHeight(15),
 	)
 
+	// Apply dense table styles for btop aesthetic
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		Foreground(styles.Yellow).
+		Bold(true).
+		Padding(0, 1)
+	s.Cell = s.Cell.
+		Padding(0, 1)
+	s.Selected = s.Selected.
+		Foreground(styles.NeonPink).
+		Background(styles.DarkGray).
+		Bold(true).
+		Padding(0, 1)
+	t.SetStyles(s)
+
 	input := textinput.New()
 	input.Placeholder = "Path to file..."
 	input.Width = 60
@@ -82,8 +101,16 @@ func New(mkvPath string) (*Model, error) {
 	}, nil
 }
 
+// SetSize updates the model dimensions
+func (m *Model) SetSize(width, height int) {
+	m.width = width
+	m.height = height
+	m.resizeTable()
+}
+
 func (m Model) Init() tea.Cmd {
-	return nil
+	// Request current terminal size
+	return tea.WindowSize()
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -93,6 +120,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.resizeTable()
 
 	case tea.KeyMsg:
 		// Handle add mode separately
@@ -119,7 +147,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Normal mode key handling
 		switch msg.String() {
 		case "esc", "q":
-			return m, tea.Quit
+			return m, func() tea.Msg { return ClosedMsg{} }
 
 		case "d":
 			// Toggle delete mode
@@ -128,7 +156,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.message = ""
 			} else {
 				m.mode = ModeDelete
-				m.message = "DELETE MODE: Press SPACE to mark, ENTER to execute"
+				m.message = locales.T("attachments.delete_mode_message")
 			}
 			m.refreshTable()
 
@@ -168,11 +196,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	header := styles.TitleStyle.Render("TOOLBOX: ATTACHMENT MANAGER") + "\n"
-	header += styles.SubtleStyle.Render(fmt.Sprintf("File: %s", filepath.Base(m.filePath))) + "\n\n"
+	// Check if terminal is too small or waiting for size
+	if m.width == 0 || m.height == 0 {
+		return locales.T("common.loading")
+	}
+
+	contentWidth := m.width - 4
+	if contentWidth < 60 {
+		contentWidth = 60
+	}
+
+	header := styles.TitleStyle.Render(locales.T("attachments.title")) + "\n"
+	header += styles.SubtleStyle.Render(fmt.Sprintf("%s %s", locales.T("attachments.file_label"), filepath.Base(m.filePath))) + "\n\n"
 
 	if m.mode == ModeAdd {
-		return m.renderAddMode(header)
+		return styles.MainWindow.Width(contentWidth).Render(m.renderAddMode(header))
 	}
 
 	tableView := m.table.View()
@@ -184,28 +222,49 @@ func (m Model) View() string {
 
 	footer := "\n"
 	if m.mode == ModeDelete {
-		footer += styles.KeyHintStyle.Render("[SPACE]") + " Mark  "
-		footer += styles.KeyHintStyle.Render("[ENTER]") + " Execute Delete  "
+		footer += styles.KeyHintStyle.Render("[SPACE]") + " " + locales.T("attachments.mark") + "  "
+		footer += styles.KeyHintStyle.Render("[ENTER]") + " " + locales.T("attachments.execute_delete") + "  "
 	} else {
-		footer += styles.KeyHintStyle.Render("[d]") + " Delete Mode  "
-		footer += styles.KeyHintStyle.Render("[a]") + " Add File  "
-		footer += styles.KeyHintStyle.Render("[e]") + " Extract All  "
+		footer += styles.KeyHintStyle.Render("[d]") + " " + locales.T("attachments.delete_mode") + "  "
+		footer += styles.KeyHintStyle.Render("[a]") + " " + locales.T("attachments.add_file") + "  "
+		footer += styles.KeyHintStyle.Render("[e]") + " " + locales.T("attachments.extract_all") + "  "
 	}
-	footer += styles.KeyHintStyle.Render("[ESC]") + " Exit"
+	footer += styles.KeyHintStyle.Render("[ESC]") + " " + locales.T("attachments.exit")
 
-	return header + tableView + info + footer
+	return styles.MainWindow.Width(contentWidth).Render(header + tableView + info + footer)
+}
+
+func (m *Model) resizeTable() {
+	if m.width < 60 {
+		return
+	}
+	// Resize table columns: ID=5, MIME=25, SIZE=12, STATUS=10 = 52 fixed
+	availableWidth := m.width - 62
+	if availableWidth < 20 {
+		availableWidth = 20
+	}
+
+	columns := []table.Column{
+		{Title: "ID", Width: 5},
+		{Title: "FILENAME", Width: availableWidth},
+		{Title: "MIME-TYPE", Width: 25},
+		{Title: "SIZE", Width: 12},
+		{Title: "STATUS", Width: 10},
+	}
+	m.table.SetColumns(columns)
+	m.table.SetHeight(m.height - 10)
 }
 
 func (m Model) renderAddMode(header string) string {
 	content := header
-	content += styles.SubtleStyle.Render("┌── ADD NEW ATTACHMENT ───────────────────────────────────────────────┐") + "\n"
+	content += styles.SubtleStyle.Render("┌── "+locales.T("attachments.add_attachment")+" ───────────────────────────────────────────────┐") + "\n"
 	content += styles.SubtleStyle.Render("│                                                                     │") + "\n"
-	content += styles.SubtleStyle.Render("│  Path: ") + m.addInput.View() + "\n"
+	content += styles.SubtleStyle.Render("│  "+locales.T("attachments.path_label")+" ") + m.addInput.View() + "\n"
 	content += styles.SubtleStyle.Render("│                                                                     │") + "\n"
-	content += styles.SubtleStyle.Render("│  *File will be embedded into the MKV container                      │") + "\n"
+	content += styles.SubtleStyle.Render("│  "+locales.T("attachments.embed_note")+"                      │") + "\n"
 	content += styles.SubtleStyle.Render("└─────────────────────────────────────────────────────────────────────┘") + "\n\n"
-	content += styles.KeyHintStyle.Render("[ENTER]") + " Confirm  "
-	content += styles.KeyHintStyle.Render("[ESC]") + " Cancel"
+	content += styles.KeyHintStyle.Render("[ENTER]") + " " + locales.T("attachments.confirm") + "  "
+	content += styles.KeyHintStyle.Render("[ESC]") + " " + locales.T("attachments.cancel")
 
 	return content
 }
@@ -222,19 +281,19 @@ func (m *Model) addAttachment(filePath string) {
 
 	cmd := exec.Command("mkvpropedit", args...)
 	if err := cmd.Run(); err != nil {
-		m.message = fmt.Sprintf("Error: %v", err)
+		m.message = fmt.Sprintf("%s %v", locales.T("attachments.error_label"), err)
 		return
 	}
 
 	// Reload attachments
 	attachments, err := listAttachments(m.filePath)
 	if err != nil {
-		m.message = fmt.Sprintf("Error reloading: %v", err)
+		m.message = fmt.Sprintf("%s %v", locales.T("attachments.error_label"), err)
 		return
 	}
 
 	m.attachments = attachments
-	m.message = "Attachment added successfully"
+	m.message = locales.T("attachments.attachment_added")
 	m.refreshTable()
 }
 

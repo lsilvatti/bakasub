@@ -73,8 +73,19 @@ func TruncateLines(content string, maxLines int) string {
 }
 
 // IsTooSmall checks if the terminal is below minimum dimensions
+// Returns false if dimensions are 0 (still waiting for WindowSizeMsg)
 func IsTooSmall(width, height int) bool {
+	// Don't show "too small" warning while waiting for size - return false
+	// so that View functions can show their own loading state
+	if width == 0 || height == 0 {
+		return false
+	}
 	return width < MinWidth || height < MinHeight
+}
+
+// IsWaitingForSize checks if we're still waiting for terminal size
+func IsWaitingForSize(width, height int) bool {
+	return width == 0 || height == 0
 }
 
 // RenderTooSmallWarning renders a warning screen when terminal is too small

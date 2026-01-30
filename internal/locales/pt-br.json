@@ -11,6 +11,8 @@
     "next": "PRÓXIMO",
     "next_step": "PRÓXIMA ETAPA",
     "save": "SALVAR",
+    "saved": "SALVO",
+    "save_exit": "Salvar e Sair",
     "confirm": "CONFIRMAR",
     "continue": "CONTINUAR",
     "finish": "FINALIZAR",
@@ -18,12 +20,21 @@
     "ok": "OK",
     "yes": "SIM",
     "no": "NÃO",
+    "edit": "Editar",
+    "navigate": "Navegar",
     "loading": "Carregando...",
     "please_wait": "Por favor aguarde...",
     "error": "Erro",
     "warning": "Aviso",
     "success": "Sucesso",
-    "info": "Info"
+    "info": "Info",
+    "required": "obrigatório"
+  },
+  "status_indicators": {
+    "missing": "FALTANDO",
+    "found": "ENCONTRADO",
+    "ok": "OK",
+    "error": "ERRO"
   },
   "wizard": {
     "title": "ASSISTENTE DE CONFIGURAÇÃO BAKASUB",
@@ -107,18 +118,27 @@
     "status": {
       "app_running": "APP EXECUTANDO",
       "api_online": "API: ONLINE",
+      "api_offline": "API: OFFLINE",
       "cache_ok": "CACHE: OK",
+      "cache_error": "CACHE: ERRO",
       "update_available": "ATUALIZAÇÃO DISPONÍVEL"
     },
     "input": {
       "title": "ENTRADA E MODO",
+      "title_numbered": "1. ENTRADA E MODO",
       "path_label": "CAMINHO",
+      "no_file_selected": "Nenhum arquivo selecionado",
+      "scanning": "VERIFICANDO...",
+      "error": "ERRO",
+      "mkv_count": "%d MKV",
+      "open_path": "ABRIR CAMINHO",
       "mode_full": "PROCESSO COMPLETO (Extrair -> Traduzir -> Muxar)",
       "mode_full_help": "*Abre a tela \"Configuração de Job\" para processamento ininterrupto.",
       "mode_watch": "MODO OBSERVAÇÃO (Auto-processar novos arquivos na pasta)"
     },
     "modules": {
       "title": "MÓDULOS (Independentes)",
+      "title_numbered": "2. MÓDULOS (Independentes)",
       "extract": "EXTRAIR TRILHAS",
       "translate": "TRADUZIR LEGENDA",
       "mux": "MUXAR CONTAINER",
@@ -126,6 +146,7 @@
     },
     "toolbox": {
       "title": "FERRAMENTAS (MKVToolNix)",
+      "title_numbered": "3. FERRAMENTAS (MKVToolNix)",
       "edit_flags": "EDITAR FLAGS / METADADOS",
       "manage_attachments": "GERENCIAR ANEXOS",
       "track_manager": "ADICIONAR/REMOVER TRILHAS",
@@ -133,6 +154,7 @@
     },
     "system": {
       "title": "SISTEMA E IA",
+      "title_numbered": "4. SISTEMA E IA",
       "model": "MODELO:",
       "target": "DESTINO:",
       "temp": "TEMP:",
@@ -143,9 +165,25 @@
       "kofi": "KO-FI",
       "deps": "DEPS:",
       "ffmpeg_ok": "FFmpeg [OK]",
+      "ffmpeg_missing": "FFmpeg [FALTANDO]",
       "mkvtoolnix_ok": "MKVToolNix [OK]",
+      "mkvtoolnix_missing": "MKVToolNix [FALTANDO]",
       "quit": "SAIR"
     }
+  },
+  "picker": {
+    "title_directory": "SELECIONAR DIRETÓRIO",
+    "title_file": "SELECIONAR ARQUIVO",
+    "title_both": "SELECIONAR ARQUIVO OU DIRETÓRIO",
+    "mode_label": "Modo:",
+    "mode_directory": "DIRETÓRIO",
+    "mode_file": "ARQUIVO",
+    "mode_both": "ARQUIVO/DIR",
+    "allowed_label": "Permitido:",
+    "hotkey_navigate": "Navegar",
+    "hotkey_select": "Selecionar/Abrir",
+    "hotkey_toggle": "Alternar Modo",
+    "hotkey_cancel": "Cancelar"
   },
   "job": {
     "title": "CONFIGURAÇÃO DE JOB",
@@ -165,7 +203,19 @@
       "media_type": "TIPO DE MÍDIA:",
       "target_lang": "IDIOMA DESTINO:",
       "glossary": "GLOSSÁRIO:",
+      "glossary_terms": "%d termos",
       "glossary_auto": "Auto-Injetar (Nome da Série)"
+    },
+    "media_types": {
+      "anime": "Anime",
+      "movie": "Filme",
+      "series": "Série/Show",
+      "documentary": "Documentário",
+      "youtube": "YouTube/Web"
+    },
+    "mux_modes": {
+      "replace": "substituir",
+      "new-file": "novo arquivo"
     },
     "muxing": {
       "title": "SAÍDA DE MUXING",
@@ -227,30 +277,114 @@
       "quit": "SAIR"
     }
   },
+  "review": {
+    "no_subtitle_found": "Nenhuma legenda encontrada",
+    "original_readonly": "ORIGINAL (Somente Leitura)",
+    "translated_editable": "TRADUZIDO (Editável)",
+    "navigate": "Navegar",
+    "save": "Salvar",
+    "exit": "Sair",
+    "modified": "[MODIFICADO]",
+    "progress_simple": "Linha %d de %d",
+    "editor_title": "EDITOR DE REVISÃO MANUAL"
+  },
+  "remuxer": {
+    "title": "REMUXAR CONTAINER",
+    "file_label": "Arquivo:",
+    "select_tracks": "SELECIONAR TRILHAS",
+    "add_external": "ADICIONAR TRILHA EXTERNA",
+    "add_file": "Adicionar arquivo...",
+    "pending_addition": "Adições pendentes:",
+    "lang_label": "Idioma:",
+    "selected_summary": "%d selecionadas de %d trilhas internas + %d externas",
+    "navigate": "Navegar",
+    "toggle": "Alternar",
+    "add_external_short": "Adicionar",
+    "remove": "Remover",
+    "continue": "Continuar",
+    "cancel": "Cancelar",
+    "confirm_title": "CONFIRMAR REMUX",
+    "warning_new_file": "Isso criará um novo arquivo",
+    "output_label": "SAÍDA",
+    "new_file_label": "Novo arquivo:",
+    "tracks_to_include": "Trilhas a incluir:",
+    "confirm": "Confirmar",
+    "add_external_track": "ADICIONAR TRILHA EXTERNA",
+    "select_track_type": "Selecione o tipo de trilha:",
+    "add_audio_track": "Trilha de Áudio",
+    "add_subtitle_track": "Trilha de Legenda",
+    "future_file_browser": "(Navegador de arquivos em versão futura)",
+    "use_cli_note": "Por enquanto, use CLI: bakasub mux --add <arquivo>",
+    "remux_failed": "✗ REMUX FALHOU",
+    "remux_complete": "✓ REMUX CONCLUÍDO",
+    "created": "Criado:"
+  },
+  "resume_modal": {
+    "title": "SESSÃO ANTERIOR DETECTADA",
+    "message": "Uma tradução incompleta foi encontrada para este arquivo.",
+    "file_label": "Arquivo:",
+    "batch_label": "Lotes:",
+    "complete": "completo",
+    "cache_label": "Cache:",
+    "cache_saved": "Salvo localmente",
+    "resume_question": "Deseja retomar a partir do lote %d?",
+    "discard_restart": "DESCARTAR E RECOMEÇAR",
+    "resume": "RETOMAR"
+  },
+  "quality_gate": {
+    "title": "GATE DE QUALIDADE",
+    "description": "Problemas detectados na tradução.",
+    "review_before_mux": "Revise antes de continuar.",
+    "detected_issues": "Problemas Detectados:",
+    "auto_fix": "Auto-corrigir",
+    "manual_review": "Revisão Manual",
+    "ignore_continue": "Ignorar e Continuar"
+  },
   "settings": {
     "title": "CONFIGURAÇÃO",
+    "switch_tab": "Trocar Aba",
     "tabs": {
       "general": "GERAL",
       "providers": "PROVEDORES DE IA",
       "models": "MODELOS DE IA",
-      "prompts": "PROMPTS"
+      "prompts": "PROMPTS",
+      "advanced": "AVANÇADO"
     },
     "general": {
       "ui_language": "IDIOMA DA INTERFACE (UI)",
-      "target_lang": "IDIOMA DESTINO PADRÃO:",
+      "target_lang": "IDIOMA DE TRADUÇÃO (Saída)",
+      "preferences": "PREFERÊNCIAS",
       "other_label": "OUTRO:",
       "automation_title": "COMPORTAMENTO DE AUTOMAÇÃO",
       "touchless_mode": "MODO SEM TOQUE (Iniciar jobs automaticamente)",
       "touchless_warning": "*Aviso: Pula todas as telas de confirmação.",
       "configure_rules": "CONFIGURAR REGRAS",
+      "remove_hi": "REMOVER TAGS DE DEFICIENTES AUDITIVOS",
       "remove_hi_tags": "REMOVER TAGS DE DEFICIENTES AUDITIVOS",
       "remove_hi_help": "(ex: [Música], (Suspiro))",
-      "auto_update": "AUTO-VERIFICAR ATUALIZAÇÕES (API GitHub)"
+      "auto_update": "AUTO-VERIFICAR ATUALIZAÇÕES (API GitHub)",
+      "temperature": "TEMPERATURA"
+    },
+    "touchless": {
+      "title": "REGRAS DO MODO SEM TOQUE (EXECUÇÃO AUTOMÁTICA)",
+      "multi_sub": "SE MÚLTIPLAS LEGENDAS ENCONTRADAS:",
+      "largest": "SELECIONAR MAIOR (Provável diálogo completo)",
+      "smallest": "SELECIONAR MENOR (Provável Sinais/Músicas)",
+      "skip": "PULAR ARQUIVO (Registrar erro e continuar lote)",
+      "default_profile": "PERFIL DE CONTEXTO PADRÃO:",
+      "mux_strategy": "ESTRATÉGIA DE MUXING:",
+      "replace": "Substituir Original (Backup .old)",
+      "new_file": "Criar Novo Arquivo"
     },
     "providers": {
       "active_provider": "PROVEDOR ATIVO",
       "select_service": "SELECIONAR SERVIÇO:",
+      "select": "SELECIONAR PROVEDOR",
+      "credentials": "CREDENCIAIS",
       "api_key": "CHAVE API:",
+      "endpoint": "ENDPOINT:",
+      "show": "MOSTRAR",
+      "hide": "OCULTAR",
       "balance": "SALDO:",
       "status": "STATUS:",
       "connected": "CONECTADO",
@@ -259,6 +393,19 @@
     "models": {
       "selection_title": "SELEÇÃO DE MODELO",
       "search_label": "BUSCAR",
+      "search_placeholder": "Buscar modelos...",
+      "tab_free": "GRÁTIS",
+      "tab_all": "TODOS",
+      "tab_switch": "Trocar aba",
+      "stop_search": "Parar busca",
+      "start_search": "Iniciar busca",
+      "no_models": "Nenhum modelo encontrado",
+      "scroll_indicator": "Rolar para ver mais",
+      "info_title": "INFORMAÇÕES",
+      "info_free": "Mostrando modelos gratuitos",
+      "info_all": "Mostrando todos os modelos",
+      "info_search": "Resultados da busca",
+      "info_controls": "Use ↑/↓ para navegar, ENTER para selecionar",
       "columns": {
         "name": "NOME",
         "cost": "CUSTO(1M)",
@@ -271,13 +418,36 @@
       "temperature": "Temperatura Global:"
     },
     "prompts": {
+      "title": "PROMPTS",
       "profile_manager": "GERENCIADOR DE PERFIS",
       "select_profile": "SELECIONAR PERFIL:",
+      "show_list": "Mostrar lista",
+      "hide_list": "Ocultar lista",
+      "locked": "BLOQUEADO",
+      "locked_hint": "Não pode ser modificado. Clone para personalizar.",
+      "editable": "EDITÁVEL",
+      "editable_hint": "Pode ser modificado.",
+      "edit_name": "EDITAR NOME",
+      "edit_placeholder": "Digite o prompt do sistema...",
+      "name_placeholder": "Nome do perfil",
+      "preview": "VISUALIZAÇÃO",
+      "clone": "CLONAR",
+      "clone_to_edit": "CLONAR PARA EDITAR",
+      "delete": "EXCLUIR",
+      "edit_temp": "EDITAR TEMP",
+      "temperature": "TEMPERATURA",
+      "uses_global": "usa global",
       "status_locked": "[BLOQUEADO] Não pode ser modificado. Clone para personalizar.",
       "preview_title": "VISUALIZAÇÃO DO PROMPT DO SISTEMA (SOMENTE LEITURA)",
       "overrides_title": "SOBRESCRIÇÕES",
       "create_new": "CRIAR NOVO",
       "clone_to_edit": "CLONAR PARA EDITAR"
+    },
+    "advanced": {
+      "log_level": "NÍVEL DE LOG",
+      "updates": "ATUALIZAÇÕES",
+      "auto_check": "Verificar automaticamente",
+      "system_info": "INFORMAÇÕES DO SISTEMA"
     },
     "footer": {
       "save_exit": "SALVAR E SAIR",

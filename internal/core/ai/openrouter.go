@@ -25,7 +25,7 @@ func NewOpenRouterAdapter(apiKey, model string, temperature float64) *OpenRouter
 		apiKey:      apiKey,
 		model:       model,
 		baseURL:     "https://openrouter.ai/api/v1",
-		client:      &http.Client{Timeout: 120 * time.Second},
+		client:      &http.Client{Timeout: 30 * time.Second},
 		temperature: temperature,
 	}
 }
@@ -153,11 +153,57 @@ func (o *OpenRouterAdapter) SendBatch(ctx context.Context, payload []Line, syste
 	return translatedLines, nil
 }
 
-// ValidateKey checks if the API key is valid
+// ValidateKey checks if the API key is valid by making a minimal chat request
 func (o *OpenRouterAdapter) ValidateKey(ctx context.Context) bool {
-	// Simple validation: try to list models
-	models, err := o.ListModels(ctx)
-	return err == nil && len(models) > 0
+	// Make a minimal chat completion request to validate the key
+	// OpenRouter's /models endpoint doesn't require auth, so we need to test with a real request
+	reqBody := openRouterRequest{
+		Model: "meta-llama/llama-3.3-70b-instruct:free", // Use a free model that's reliably available
+		Messages: []openRouterMessage{
+			{Role: "user", Content: "test"},
+		},
+		Temperature: 0.0,
+	}
+
+	reqJSON, err := json.Marshal(reqBody)
+	if err != nil {
+		return false
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", o.baseURL+"/chat/completions", bytes.NewReader(reqJSON))
+	if err != nil {
+		return false
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+o.apiKey)
+	req.Header.Set("HTTP-Referer", "https://github.com/lsilvatti/bakasub")
+	req.Header.Set("X-Title", "BakaSub")
+
+	resp, err := o.client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	// Read response body for debugging
+	body, _ := io.ReadAll(resp.Body)
+
+	// Check for authentication errors
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		// Try to parse error message
+		var errResp struct {
+			Error struct {
+				Message string `json:"message"`
+				Code    int    `json:"code"`
+			} `json:"error"`
+		}
+		json.Unmarshal(body, &errResp)
+		return false
+	}
+
+	// Any 2xx status means the key is valid
+	return resp.StatusCode >= 200 && resp.StatusCode < 300
 }
 
 // ListModels returns available models from OpenRouter
@@ -168,22 +214,59 @@ func (o *OpenRouterAdapter) ListModels(ctx context.Context) ([]string, error) {
 	}
 
 	req.Header.Set("Authorization", "Bearer "+o.apiKey)
+	req.Header.Set("HTTP-Referer", "https://github.com/lsilvatti/bakasub")
+	req.Header.Set("X-Title", "BakaSub")
 
 	resp, err := o.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, &ProviderError{
+			Provider: "openrouter",
+			Code:     "network_error",
+			Message:  err.Error(),
+			Retry:    true,
+		}
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	// Check for authentication/authorization errors
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		// Try to parse error from JSON
+		var errResp struct {
+			Error struct {
+				Message string `json:"message"`
+				Code    string `json:"code"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(body, &errResp) == nil && errResp.Error.Message != "" {
+			return nil, &ProviderError{
+				Provider: "openrouter",
+				Code:     "invalid_key",
+				Message:  errResp.Error.Message,
+				Retry:    false,
+			}
+		}
+		return nil, &ProviderError{
+			Provider: "openrouter",
+			Code:     "invalid_key",
+			Message:  fmt.Sprintf("Authentication failed (HTTP %d): %s", resp.StatusCode, string(body)),
+			Retry:    false,
+		}
 	}
 
-	// Parse models response
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &ProviderError{
+			Provider: "openrouter",
+			Code:     "http_error",
+			Message:  fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body)),
+			Retry:    resp.StatusCode >= 500,
+		}
+	}
+
+	// Parse models response with pricing
 	var modelsResp struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
+		Data []OpenRouterModel `json:"data"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
@@ -192,8 +275,21 @@ func (o *OpenRouterAdapter) ListModels(ctx context.Context) ([]string, error) {
 
 	models := make([]string, len(modelsResp.Data))
 	for i, m := range modelsResp.Data {
-		models[i] = m.ID
+		// Format: id|prompt_price|context_length
+		// Example: openai/gpt-4|0.00003|8192
+		models[i] = fmt.Sprintf("%s|%s|%d", m.ID, m.Pricing.Prompt, m.ContextLength)
 	}
 
 	return models, nil
+}
+
+// OpenRouterModel represents a model from the API
+type OpenRouterModel struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	ContextLength int    `json:"context_length"`
+	Pricing       struct {
+		Prompt     string `json:"prompt"`
+		Completion string `json:"completion"`
+	} `json:"pricing"`
 }

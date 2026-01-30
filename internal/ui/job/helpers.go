@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lsilvatti/bakasub/internal/locales"
 	"github.com/lsilvatti/bakasub/internal/ui/styles"
 )
 
@@ -91,28 +92,49 @@ func (m ConflictModal) Update(msg tea.Msg) (ConflictModal, tea.Cmd) {
 func (m ConflictModal) View() string {
 	var s strings.Builder
 	modalStyle := lipgloss.NewStyle().Border(lipgloss.DoubleBorder()).BorderForeground(styles.NeonPink).Padding(1, 2).Width(80)
-	s.WriteString(styles.TitleStyle.Render("RESOLVE TRACK CONFLICT") + "\n\n")
-	s.WriteString("Multiple tracks detected. Select the Full Dialogue track:\n\n")
+	s.WriteString(styles.TitleStyle.Render(locales.T("conflict_modal.title")) + "\n\n")
+	s.WriteString(locales.T("conflict_modal.message") + "\n\n")
 	s.WriteString(m.table.View() + "\n\n")
-	footer := styles.KeyHintStyle.Render("[ESC]") + " CANCEL      " + styles.KeyHintStyle.Render("[ENTER]") + " CONFIRM"
+	footer := styles.KeyHintStyle.Render("[ESC]") + " " + locales.T("conflict_modal.cancel") + "      " + styles.KeyHintStyle.Render("[ENTER]") + " " + locales.T("conflict_modal.confirm")
 	s.WriteString(footer)
 	return modalStyle.Render(s.String())
 }
 
 // DryRunReport represents the simulation report
 type DryRunReport struct {
-	config        JobConfig
-	CanWrite      bool
-	TokenCount    int
-	EstimatedCost float64
-	Warnings      []string
-	width         int
-	height        int
+	config          JobConfig
+	CanWrite        bool
+	TokenCount      int
+	EstimatedCost   float64
+	Warnings        []string
+	width           int
+	height          int
+	TotalCharacters int
+	InputTokens     int
+	OutputTokens    int
+	TotalSize       string
 }
 
 // NewDryRunReport creates a new dry run report
 func NewDryRunReport(config JobConfig) *DryRunReport {
-	return &DryRunReport{config: config, Warnings: []string{}}
+	// Calculate estimates
+	totalChars := 0
+	for _, file := range config.Files {
+		totalChars += file.SubtitleChars
+		if file.SubtitleChars == 0 {
+			totalChars += 10000 // Default estimate per file
+		}
+	}
+	inputTokens := totalChars / 4
+	outputTokens := int(float64(inputTokens) * 0.75) // Estimate 75% output
+
+	return &DryRunReport{
+		config:          config,
+		Warnings:        []string{},
+		TotalCharacters: totalChars,
+		InputTokens:     inputTokens,
+		OutputTokens:    outputTokens,
+	}
 }
 
 // Update handles messages for the dry run report
@@ -127,29 +149,72 @@ func (m DryRunReport) Update(msg tea.Msg) (DryRunReport, tea.Cmd) {
 
 // View renders the dry run report
 func (m DryRunReport) View() string {
+	contentWidth := m.width - 4
+	if contentWidth < 70 {
+		contentWidth = 70
+	}
+
 	var s strings.Builder
-	s.WriteString(styles.TitleStyle.Render("DRY RUN REPORT (SIMULATION)") + "\n\n")
-	s.WriteString(styles.SectionStyle.Render("JOB SUMMARY") + "\n")
-	s.WriteString(fmt.Sprintf("  FILES:       %d Episodes\n", len(m.config.Files)))
-	s.WriteString(fmt.Sprintf("  PROVIDER:    %s\n\n", m.config.AIModel))
-	s.WriteString(styles.SectionStyle.Render("COST ANALYSIS") + "\n")
-	s.WriteString(fmt.Sprintf("  EST. TOKENS:       %dk\n", m.TokenCount/1000))
-	s.WriteString(fmt.Sprintf("  ESTIMATED TOTAL:   $%.2f USD\n\n", m.EstimatedCost))
-	s.WriteString(styles.SectionStyle.Render("PRE-FLIGHT CHECKS") + "\n")
-	if m.CanWrite {
-		s.WriteString(styles.SuccessStyle.Render("  [OK]") + " Write Permissions\n")
-	} else {
-		s.WriteString(styles.ErrorStyle.Render("  [!!]") + " No Write Permissions\n")
-	}
-	if len(m.Warnings) > 0 {
-		for _, warning := range m.Warnings {
-			s.WriteString(styles.WarningStyle.Render(fmt.Sprintf("  [!!] %s\n", warning)))
-		}
-	}
+	s.WriteString(styles.TitleStyle.Render(locales.T("dry_run.title")) + "\n\n")
+
+	// Job Summary section
+	jobSummary := fmt.Sprintf("   %s %d %s\n", locales.T("dry_run.files_label"), len(m.config.Files), locales.T("dry_run.episodes_mkv"))
+	jobSummary += fmt.Sprintf("   %s %s", locales.T("dry_run.provider_label"), m.config.AIModel)
+	s.WriteString(styles.Panel.Render("\n" + styles.SectionStyle.Render(locales.T("dry_run.job_summary")) + "\n\n" + jobSummary + "\n"))
 	s.WriteString("\n")
-	footer := styles.KeyHintStyle.Render("[ESC]") + " BACK TO SETUP"
+
+	// Cost Analysis section (detailed)
+	pricePerM := m.config.ModelPricePerM
+	if pricePerM == 0 {
+		pricePerM = 0.15 // Default estimate
+	}
+	costAnalysis := fmt.Sprintf("   %s %s (%s)\n", locales.T("dry_run.total_characters"), formatNumberWithCommas(m.TotalCharacters), locales.T("dry_run.approx"))
+	costAnalysis += fmt.Sprintf("   %s %s\n", locales.T("dry_run.input_tokens"), formatNumberWithCommas(m.InputTokens))
+	costAnalysis += fmt.Sprintf("   %s %s\n", locales.T("dry_run.output_tokens"), formatNumberWithCommas(m.OutputTokens))
+	costAnalysis += "\n"
+	costAnalysis += fmt.Sprintf("   %s $%.2f\n", locales.T("dry_run.price_per_m"), pricePerM)
+	costAnalysis += styles.SuccessStyle.Render(fmt.Sprintf("   %s $%.2f USD", locales.T("dry_run.estimated_total"), m.EstimatedCost))
+	s.WriteString(styles.Panel.Render("\n" + styles.SectionStyle.Render(locales.T("dry_run.cost_analysis")) + "\n\n" + costAnalysis + "\n"))
+	s.WriteString("\n")
+
+	// Pre-flight Checks section
+	preflightChecks := ""
+	if m.CanWrite {
+		preflightChecks += "   " + styles.SuccessStyle.Render("[OK]") + " " + locales.T("dry_run.write_permissions_ok") + "\n"
+	} else {
+		preflightChecks += "   " + styles.ErrorStyle.Render("[!!]") + " " + locales.T("dry_run.no_write_permissions") + "\n"
+	}
+	preflightChecks += "   " + styles.SuccessStyle.Render("[OK]") + " " + locales.T("dry_run.binaries_found")
+
+	// Show warnings
+	for _, warning := range m.Warnings {
+		preflightChecks += "\n   " + styles.WarningStyle.Render(fmt.Sprintf("[!!] %s %s", locales.T("dry_run.warning"), warning))
+	}
+	s.WriteString(styles.Panel.Render("\n" + styles.SectionStyle.Render(locales.T("dry_run.preflight_checks")) + "\n\n" + preflightChecks + "\n"))
+	s.WriteString("\n\n")
+
+	// Footer
+	footer := styles.KeyHintStyle.Render("[ ESC ]") + " " + locales.T("dry_run.back_to_setup") + "               "
+	footer += styles.KeyHintStyle.Render("[ ENTER ]") + " " + locales.T("dry_run.proceed_to_run")
 	s.WriteString(footer)
-	return styles.AppStyle.Render(s.String())
+
+	return styles.MainWindow.Width(contentWidth).Render(s.String())
+}
+
+// formatNumberWithCommas formats a number with comma separators
+func formatNumberWithCommas(n int) string {
+	str := fmt.Sprintf("%d", n)
+	if len(str) <= 3 {
+		return str
+	}
+	result := ""
+	for i, c := range str {
+		if i > 0 && (len(str)-i)%3 == 0 {
+			result += ","
+		}
+		result += string(c)
+	}
+	return result
 }
 
 // GlossaryEditor represents the glossary editing interface
@@ -213,10 +278,10 @@ func (m GlossaryEditor) Update(msg tea.Msg) (GlossaryEditor, tea.Cmd) {
 // View renders the glossary editor
 func (m GlossaryEditor) View() string {
 	var s strings.Builder
-	s.WriteString(styles.TitleStyle.Render("PROJECT GLOSSARY EDITOR") + "\n\n")
-	s.WriteString(fmt.Sprintf("FILE: %s\n\n", m.path))
+	s.WriteString(styles.TitleStyle.Render(locales.T("glossary_editor.title")) + "\n\n")
+	s.WriteString(fmt.Sprintf("%s %s\n\n", locales.T("glossary_editor.file_label"), m.path))
 	s.WriteString(m.table.View() + "\n\n")
-	s.WriteString(styles.KeyHintStyle.Render("[ESC]") + " CLOSE")
+	s.WriteString(styles.KeyHintStyle.Render("[ESC]") + " " + locales.T("common.close"))
 	return styles.AppStyle.Render(s.String())
 }
 

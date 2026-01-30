@@ -48,6 +48,15 @@ func GetInstance(dbPath string) (*Cache, error) {
 	return instance, initErr
 }
 
+// Open is a convenience function to open/create the cache database
+// If dbPath is empty, uses the default path (bakasub.db in config dir)
+func Open(dbPath string) (*Cache, error) {
+	if dbPath == "" {
+		dbPath = "bakasub.db"
+	}
+	return newCache(dbPath)
+}
+
 // newCache creates a new cache instance
 func newCache(dbPath string) (*Cache, error) {
 	db, err := sql.Open("sqlite", dbPath)
@@ -90,12 +99,14 @@ func (c *Cache) initSchema() error {
 		lang_pair TEXT NOT NULL,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		last_used DATETIME DEFAULT CURRENT_TIMESTAMP,
-		use_count INTEGER DEFAULT 1
+		use_count INTEGER DEFAULT 1,
+		UNIQUE(original_hash, lang_pair)
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_original_hash ON cache(original_hash);
 	CREATE INDEX IF NOT EXISTS idx_lang_pair ON cache(lang_pair);
 	CREATE INDEX IF NOT EXISTS idx_original_text ON cache(original_text);
+	CREATE INDEX IF NOT EXISTS idx_last_used ON cache(last_used);
 	`
 
 	_, err := c.db.Exec(schema)
@@ -181,13 +192,18 @@ func (c *Cache) GetFuzzyMatch(text, langPair string, threshold float64) (*CacheE
 	}
 
 	// Fuzzy search: get candidates from same language pair
+	// Use text length as a heuristic filter - similar length texts are more likely to match
+	textLen := len(text)
+	minLen := int(float64(textLen) * threshold) // e.g., 95% of original length
+	maxLen := int(float64(textLen) / threshold) // e.g., 105% of original length
+
 	rows, err := c.db.Query(`
 		SELECT original_hash, original_text, translated_text, lang_pair
 		FROM cache 
-		WHERE lang_pair = ?
+		WHERE lang_pair = ? AND LENGTH(original_text) BETWEEN ? AND ?
 		ORDER BY last_used DESC
-		LIMIT 100
-	`, langPair)
+		LIMIT 500
+	`, langPair, minLen, maxLen)
 
 	if err != nil {
 		return nil, false
@@ -278,7 +294,7 @@ func (c *Cache) SaveBatch(entries []CacheEntry) error {
 		ON CONFLICT(original_hash, lang_pair) DO UPDATE SET
 			translated_text = excluded.translated_text,
 			last_used = CURRENT_TIMESTAMP,
-			use_count = use_count + 1
+			use_count = cache.use_count + 1
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)

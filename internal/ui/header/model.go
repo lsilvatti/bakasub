@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/lsilvatti/bakasub/internal/locales"
 	"github.com/lsilvatti/bakasub/internal/ui/styles"
 )
 
@@ -24,6 +25,9 @@ type Track struct {
 type MKVInfo struct {
 	Tracks []Track `json:"tracks"`
 }
+
+// ClosedMsg is sent when the header editor should be closed
+type ClosedMsg struct{}
 
 type Model struct {
 	table    table.Model
@@ -51,13 +55,13 @@ func New(mkvPath string) (*Model, error) {
 
 	rows := make([]table.Row, len(tracks))
 	for i, t := range tracks {
-		defaultFlag := "NO"
+		defaultFlag := "[ NO  ]"
 		if t.Default {
-			defaultFlag = "YES"
+			defaultFlag = "[ YES ]"
 		}
-		forcedFlag := "NO"
+		forcedFlag := "[ NO  ]"
 		if t.Forced {
-			forcedFlag = "YES"
+			forcedFlag = "[ YES ]"
 		}
 
 		rows[i] = table.Row{
@@ -77,6 +81,21 @@ func New(mkvPath string) (*Model, error) {
 		table.WithHeight(15),
 	)
 
+	// Apply dense table styles for btop aesthetic
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		Foreground(styles.Yellow).
+		Bold(true).
+		Padding(0, 1)
+	s.Cell = s.Cell.
+		Padding(0, 1)
+	s.Selected = s.Selected.
+		Foreground(styles.NeonPink).
+		Background(styles.DarkGray).
+		Bold(true).
+		Padding(0, 1)
+	t.SetStyles(s)
+
 	return &Model{
 		table:    t,
 		tracks:   tracks,
@@ -84,8 +103,16 @@ func New(mkvPath string) (*Model, error) {
 	}, nil
 }
 
+// SetSize updates the model dimensions
+func (m *Model) SetSize(width, height int) {
+	m.width = width
+	m.height = height
+	m.resizeTable()
+}
+
 func (m Model) Init() tea.Cmd {
-	return nil
+	// Request current terminal size
+	return tea.WindowSize()
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -95,11 +122,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.resizeTable()
 
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "esc", "q":
-			return m, tea.Quit
+			return m, func() tea.Msg { return ClosedMsg{} }
 
 		case "d":
 			// Toggle Default flag for selected track
@@ -133,22 +161,53 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	header := styles.TitleStyle.Render("HEADER EDITOR (MKVPropEdit)") + "\n"
-	header += styles.SubtleStyle.Render(fmt.Sprintf("File: %s", m.filePath)) + "\n\n"
+	// Check if terminal is too small or waiting for size
+	if m.width == 0 || m.height == 0 {
+		return locales.T("common.loading")
+	}
+
+	header := styles.TitleStyle.Render(locales.T("header_editor.title")) + "\n"
+	header += styles.SubtleStyle.Render(fmt.Sprintf("%s %s", locales.T("header_editor.file_label"), m.filePath)) + "\n\n"
 
 	tableView := m.table.View()
 
 	footer := "\n"
 	if m.modified {
-		footer += styles.ErrorStyle.Render("*MODIFIED - Press Ctrl+S to save") + "\n"
+		footer += styles.ErrorStyle.Render(locales.T("header_editor.modified_warning")) + "\n"
 	}
-	footer += styles.KeyHintStyle.Render("[↑/↓]") + " Navigate  "
-	footer += styles.KeyHintStyle.Render("[d]") + " Toggle Default  "
-	footer += styles.KeyHintStyle.Render("[f]") + " Toggle Forced  "
-	footer += styles.KeyHintStyle.Render("[Ctrl+S]") + " Apply  "
-	footer += styles.KeyHintStyle.Render("[ESC]") + " Exit"
+	footer += styles.KeyHintStyle.Render("[↑/↓]") + " " + locales.T("header_editor.navigate") + "  "
+	footer += styles.KeyHintStyle.Render("[d]") + " " + locales.T("header_editor.toggle_default") + "  "
+	footer += styles.KeyHintStyle.Render("[f]") + " " + locales.T("header_editor.toggle_forced") + "  "
+	footer += styles.KeyHintStyle.Render("[Ctrl+S]") + " " + locales.T("header_editor.apply") + "  "
+	footer += styles.KeyHintStyle.Render("[ESC]") + " " + locales.T("header_editor.exit")
 
-	return header + tableView + footer
+	contentWidth := m.width - 4
+	if contentWidth < 60 {
+		contentWidth = 60
+	}
+	return styles.MainWindow.Width(contentWidth).Render(header + tableView + footer)
+}
+
+func (m *Model) resizeTable() {
+	if m.width < 60 {
+		return
+	}
+	// Fixed columns: ID=5, TYPE=8, LANG=8, DEFAULT=10, FORCED=10 = 41
+	availableWidth := m.width - 51
+	if availableWidth < 20 {
+		availableWidth = 20
+	}
+
+	columns := []table.Column{
+		{Title: "ID", Width: 5},
+		{Title: "TYPE", Width: 8},
+		{Title: "LANG", Width: 8},
+		{Title: "TRACK NAME", Width: availableWidth},
+		{Title: "DEFAULT", Width: 10},
+		{Title: "FORCED", Width: 10},
+	}
+	m.table.SetColumns(columns)
+	m.table.SetHeight(m.height - 10)
 }
 
 func (m *Model) toggleDefault(idx int) {
@@ -162,13 +221,13 @@ func (m *Model) toggleForced(idx int) {
 func (m *Model) refreshTable() {
 	rows := make([]table.Row, len(m.tracks))
 	for i, t := range m.tracks {
-		defaultFlag := "NO"
+		defaultFlag := "[ NO  ]"
 		if t.Default {
-			defaultFlag = "YES"
+			defaultFlag = "[ YES ]"
 		}
-		forcedFlag := "NO"
+		forcedFlag := "[ NO  ]"
 		if t.Forced {
-			forcedFlag = "YES"
+			forcedFlag = "[ YES ]"
 		}
 
 		rows[i] = table.Row{

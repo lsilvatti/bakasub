@@ -10,6 +10,8 @@ import (
 	"github.com/charmbracelet/bubbles/filepicker"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lsilvatti/bakasub/internal/locales"
+	"github.com/lsilvatti/bakasub/internal/ui/styles"
 )
 
 // Neon color palette
@@ -74,7 +76,7 @@ func New(startDir string, mode SelectionMode) Model {
 	fp.ShowPermissions = false
 	fp.ShowSize = true
 	fp.ShowHidden = false
-	fp.Height = 20
+	fp.Height = 15 // Will be adjusted on WindowSizeMsg
 
 	// Configure file filtering based on mode
 	if mode == ModeDirectory {
@@ -97,25 +99,48 @@ func New(startDir string, mode SelectionMode) Model {
 	fp.Styles.Selected = lipgloss.NewStyle().Foreground(neonPink).Bold(true)
 	fp.Styles.Symlink = lipgloss.NewStyle().Foreground(yellow)
 
-	title := "SELECT DIRECTORY"
+	title := locales.T("picker.title_directory")
 	if mode == ModeFile {
-		title = "SELECT FILE"
+		title = locales.T("picker.title_file")
 	} else if mode == ModeBoth {
-		title = "SELECT FILE OR DIRECTORY"
+		title = locales.T("picker.title_both")
 	}
 
 	return Model{
 		filepicker:    fp,
 		selectionMode: mode,
-		width:         80,
-		height:        24,
+		width:         0, // Will be set by WindowSizeMsg
+		height:        0, // Will be set by WindowSizeMsg
 		title:         title,
+	}
+}
+
+// SetSize updates the model dimensions
+func (m *Model) SetSize(width, height int) {
+	m.width = width
+	m.height = height
+	m.updatePickerHeight()
+}
+
+// updatePickerHeight recalculates the filepicker height based on current dimensions
+func (m *Model) updatePickerHeight() {
+	// Reserve space for:
+	// Header section: 6 lines (bar + title + bar + empty + path + mode)
+	// Empty line before picker: 1 line
+	// Footer: 3-4 lines (empty + help OR empty + filetypes + help)
+	// MainWindow borders: 2 lines
+	// MainWindow padding: 0 lines (we only have horizontal padding)
+	reserved := 6 + 1 + 4 + 2 // = 13 lines reserved
+	m.filepicker.Height = m.height - reserved
+	if m.filepicker.Height < 5 {
+		m.filepicker.Height = 5
 	}
 }
 
 // Init initializes the file picker
 func (m Model) Init() tea.Cmd {
-	return m.filepicker.Init()
+	// Request terminal size and initialize filepicker
+	return tea.Batch(tea.WindowSize(), m.filepicker.Init())
 }
 
 // Update handles messages
@@ -137,19 +162,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filepicker.DirAllowed = false
 				m.filepicker.FileAllowed = true
 				m.filepicker.AllowedTypes = []string{".mkv", ".mp4", ".avi", ".srt", ".ass", ".ssa", ".sub"}
-				m.title = "SELECT FILE"
+				m.title = locales.T("picker.title_file")
 			case ModeFile:
 				m.selectionMode = ModeBoth
 				m.filepicker.DirAllowed = true
 				m.filepicker.FileAllowed = true
 				m.filepicker.AllowedTypes = nil
-				m.title = "SELECT FILE OR DIRECTORY"
+				m.title = locales.T("picker.title_both")
 			default:
 				m.selectionMode = ModeDirectory
 				m.filepicker.DirAllowed = true
 				m.filepicker.FileAllowed = false
 				m.filepicker.AllowedTypes = nil
-				m.title = "SELECT DIRECTORY"
+				m.title = locales.T("picker.title_directory")
 			}
 			return m, nil
 
@@ -176,7 +201,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.filepicker.Height = m.height - 12
+		m.updatePickerHeight()
 	}
 
 	// Update the filepicker
@@ -205,19 +230,36 @@ func (m Model) View() string {
 		return ""
 	}
 
-	// Header
+	// Check if terminal is too small or waiting for size
+	if m.width == 0 || m.height == 0 {
+		return locales.T("common.loading")
+	}
+
+	contentWidth := m.width - 4
+	if contentWidth < 40 {
+		contentWidth = 40
+	}
+
+	// Header bar with title
+	headerBarWidth := contentWidth - 4
+	if headerBarWidth < 10 {
+		headerBarWidth = 10
+	}
+	headerBar := strings.Repeat("▒", headerBarWidth)
+	headerBarStyle := lipgloss.NewStyle().Foreground(gray)
 	headerStyle := lipgloss.NewStyle().
 		Foreground(neonPink).
-		Bold(true).
-		Padding(0, 1)
-
-	header := headerStyle.Render("╔══ " + m.title + " ══╗")
+		Bold(true)
+	titleHeader := headerStyle.Render(m.title)
 
 	// Current path display
 	currentPath := m.filepicker.CurrentDirectory
-	if len(currentPath) > m.width-20 {
-		// Truncate long paths
-		currentPath = "..." + currentPath[len(currentPath)-(m.width-23):]
+	maxPathLen := contentWidth - 10
+	if maxPathLen < 20 {
+		maxPathLen = 20
+	}
+	if len(currentPath) > maxPathLen {
+		currentPath = "..." + currentPath[len(currentPath)-(maxPathLen-3):]
 	}
 	pathStyle := lipgloss.NewStyle().
 		Foreground(cyan).
@@ -228,67 +270,101 @@ func (m Model) View() string {
 	modeStyle := lipgloss.NewStyle().
 		Foreground(yellow).
 		Bold(true)
-	modeText := "DIRECTORY"
+	modeText := locales.T("picker.mode_directory")
 	if m.selectionMode == ModeFile {
-		modeText = "FILE"
+		modeText = locales.T("picker.mode_file")
 	} else if m.selectionMode == ModeBoth {
-		modeText = "FILE/DIR"
+		modeText = locales.T("picker.mode_both")
 	}
-	modeDisplay := "Mode: " + modeStyle.Render(modeText)
+	modeDisplay := locales.T("picker.mode_label") + " " + modeStyle.Render(modeText)
 
-	// File picker content with border
-	pickerStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(cyan).
-		Padding(0, 1).
-		Width(m.width - 6)
-
-	pickerContent := pickerStyle.Render(m.filepicker.View())
+	// File picker content
+	pickerContent := m.filepicker.View()
 
 	// Help text
-	helpStyle := lipgloss.NewStyle().
-		Foreground(gray)
-
 	help := lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		renderHotkey("↑/↓", "Navigate"),
+		renderHotkey("↑/↓", locales.T("picker.hotkey_navigate")),
 		"  ",
-		renderHotkey("Enter", "Select/Open"),
+		renderHotkey("Enter", locales.T("picker.hotkey_select")),
 		"  ",
-		renderHotkey("Tab", "Toggle Mode"),
+		renderHotkey("Tab", locales.T("picker.hotkey_toggle")),
 		"  ",
-		renderHotkey("Esc", "Cancel"),
+		renderHotkey("Esc", locales.T("picker.hotkey_cancel")),
 	)
 
 	// File type hint
+	helpStyle := lipgloss.NewStyle().
+		Foreground(gray)
 	fileTypes := ""
 	if m.selectionMode == ModeFile {
-		fileTypes = helpStyle.Render("Allowed: .mkv .mp4 .avi .srt .ass .ssa .sub")
+		fileTypes = helpStyle.Render(locales.T("picker.allowed_label") + " .mkv .mp4 .avi .srt .ass .ssa .sub")
 	}
+
+	// Build header section
+	headerSection := lipgloss.JoinVertical(
+		lipgloss.Left,
+		headerBarStyle.Render(headerBar),
+		titleHeader,
+		headerBarStyle.Render(headerBar),
+		"",
+		pathDisplay,
+		modeDisplay,
+	)
+
+	// Footer with file types and help
+	var footer string
+	if fileTypes != "" {
+		footer = lipgloss.JoinVertical(lipgloss.Left, "", fileTypes, help)
+	} else {
+		footer = lipgloss.JoinVertical(lipgloss.Left, "", help)
+	}
+
+	// Calculate available height for picker content
+	// Header: 6 lines (bar + title + bar + empty + path + mode)
+	// Footer: 2-3 lines (empty + help OR empty + filetypes + help)
+	// Borders: 2 lines
+	headerHeight := 6
+	footerHeight := 3
+	if fileTypes != "" {
+		footerHeight = 4
+	}
+	borderHeight := 2
+
+	availableHeight := m.height - headerHeight - footerHeight - borderHeight
+	if availableHeight < 5 {
+		availableHeight = 5
+	}
+
+	// Style for fixed height picker content area
+	pickerStyle := lipgloss.NewStyle().
+		Height(availableHeight).
+		MaxHeight(availableHeight)
 
 	// Combine all elements
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
-		header,
+		headerSection,
 		"",
-		pathDisplay,
-		modeDisplay,
-		"",
-		pickerContent,
-		"",
-		fileTypes,
-		help,
+		pickerStyle.Render(pickerContent),
+		footer,
 	)
 
-	// Wrap in main border
-	mainStyle := lipgloss.NewStyle().
-		Border(lipgloss.DoubleBorder()).
-		BorderForeground(neonPink).
-		Padding(1, 2).
-		Width(m.width - 2).
-		Height(m.height - 2)
+	// Use styles.MainWindow like dashboard does
+	// Don't set Height on MainWindow - let content determine height
+	// and use lipgloss.Place to position in terminal
+	mainContent := styles.MainWindow.
+		Width(contentWidth).
+		Render(content)
 
-	return mainStyle.Render(content)
+	// Place content at top of terminal
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Left,
+		lipgloss.Top,
+		mainContent,
+	)
 }
 
 // renderHotkey creates a styled hotkey hint

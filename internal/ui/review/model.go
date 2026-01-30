@@ -9,10 +9,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lsilvatti/bakasub/internal/core/parser"
+	"github.com/lsilvatti/bakasub/internal/locales"
 	"github.com/lsilvatti/bakasub/internal/ui/focus"
 	"github.com/lsilvatti/bakasub/internal/ui/layout"
 	"github.com/lsilvatti/bakasub/internal/ui/styles"
 )
+
+// ClosedMsg is sent when the review editor should be closed
+type ClosedMsg struct{}
 
 type Model struct {
 	originalLines   []parser.SubtitleLine
@@ -32,9 +36,17 @@ func New(originalPath, translatedPath string) (*Model, error) {
 		return nil, err
 	}
 
-	transFile, err := parser.ParseFile(translatedPath)
-	if err != nil {
-		return nil, err
+	// If translatedPath is empty, use originalPath (single file editing mode)
+	var transFile *parser.SubtitleFile
+	if translatedPath == "" {
+		// Clone the original file for editing
+		transFile = origFile
+		translatedPath = originalPath
+	} else {
+		transFile, err = parser.ParseFile(translatedPath)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	ta := textarea.New()
@@ -61,8 +73,16 @@ func New(originalPath, translatedPath string) (*Model, error) {
 	return m, nil
 }
 
+// SetSize updates the model dimensions
+func (m *Model) SetSize(width, height int) {
+	m.width = width
+	m.height = height
+	m.editor.SetWidth(width/2 - 4)
+}
+
 func (m Model) Init() tea.Cmd {
-	return textarea.Blink
+	// Request terminal size and start editor blink
+	return tea.Batch(tea.WindowSize(), textarea.Blink)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -100,7 +120,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
 				// ESC exits the editor completely
-				return m, tea.Quit
+				return m, func() tea.Msg { return ClosedMsg{} }
 			}
 
 			// All other keys go to the editor
@@ -141,13 +161,18 @@ func (m Model) saveFile() tea.Cmd {
 }
 
 func (m Model) View() string {
+	// Wait for terminal size
+	if layout.IsWaitingForSize(m.width, m.height) {
+		return locales.T("common.loading")
+	}
+
 	// Check if terminal is too small
 	if layout.IsTooSmall(m.width, m.height) {
 		return layout.RenderTooSmallWarning(m.width, m.height)
 	}
 
 	if m.width == 0 {
-		return "Loading..."
+		return locales.T("common.loading")
 	}
 
 	leftWidth := layout.CalculateHalf(m.width, 2)
@@ -178,29 +203,29 @@ func (m Model) View() string {
 	}
 
 	leftPanel := leftStyle.Render(
-		styles.TitleStyle.Render("ORIGINAL (Read-Only)") + "\n\n" +
+		styles.TitleStyle.Render(locales.T("review.original_readonly")) + "\n\n" +
 			originalText,
 	)
 
 	rightPanel := rightStyle.Render(
-		styles.TitleStyle.Render("TRANSLATED (Editable)") + "\n\n" +
+		styles.TitleStyle.Render(locales.T("review.translated_editable")) + "\n\n" +
 			m.editor.View(),
 	)
 
 	content := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
 
-	footer := styles.KeyHintStyle.Render("[Tab/Shift+Tab]") + " Navigate  " +
-		styles.KeyHintStyle.Render("[Ctrl+S]") + " Save  " +
-		styles.KeyHintStyle.Render("[ESC]") + " Exit"
+	footer := styles.KeyHintStyle.Render("[Tab/Shift+Tab]") + " " + locales.T("review.navigate") + "  " +
+		styles.KeyHintStyle.Render("[Ctrl+S]") + " " + locales.T("review.save") + "  " +
+		styles.KeyHintStyle.Render("[ESC]") + " " + locales.T("review.exit")
 
 	if !m.saved {
-		footer += " " + styles.WarningStyle.Render("*Modified")
+		footer += " " + styles.WarningStyle.Render(locales.T("review.modified"))
 	}
 
-	progress := fmt.Sprintf("Line %d/%d", m.currentIndex+1, len(m.translatedLines))
+	progress := locales.Tf("review.progress_simple", m.currentIndex+1, len(m.translatedLines))
 
 	return lipgloss.JoinVertical(lipgloss.Left,
-		styles.TitleStyle.Render("MANUAL REVIEW EDITOR"),
+		styles.TitleStyle.Render(locales.T("review.editor_title")),
 		progress,
 		"",
 		content,

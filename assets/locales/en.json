@@ -147,6 +147,20 @@
       "quit": "QUIT"
     }
   },
+  "picker": {
+    "title_directory": "SELECT DIRECTORY",
+    "title_file": "SELECT FILE",
+    "title_both": "SELECT FILE OR DIRECTORY",
+    "mode_label": "Mode:",
+    "mode_directory": "DIRECTORY",
+    "mode_file": "FILE",
+    "mode_both": "FILE/DIR",
+    "allowed_label": "Allowed:",
+    "hotkey_navigate": "Navigate",
+    "hotkey_select": "Select/Open",
+    "hotkey_toggle": "Toggle Mode",
+    "hotkey_cancel": "Cancel"
+  },
   "job": {
     "title": "JOB SETUP",
     "batch_label": "Batch: %d Files",
@@ -165,7 +179,19 @@
       "media_type": "MEDIA TYPE:",
       "target_lang": "TARGET LANG:",
       "glossary": "GLOSSARY:",
+      "glossary_terms": "%d terms",
       "glossary_auto": "Auto-Inject (Series Name)"
+    },
+    "media_types": {
+      "anime": "Anime",
+      "movie": "Movie",
+      "series": "Series/Show",
+      "documentary": "Documentary",
+      "youtube": "YouTube/Web"
+    },
+    "mux_modes": {
+      "replace": "replace",
+      "new-file": "new file"
     },
     "muxing": {
       "title": "MUXING OUTPUT",

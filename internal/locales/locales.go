@@ -42,7 +42,7 @@ func init() {
 // Init initializes the i18n system by loading the configured language
 // If no language is configured, it defaults to "en"
 func Init() error {
-	langCode := viper.GetString("ui_language")
+	langCode := viper.GetString("interface_lang")
 	if langCode == "" {
 		langCode = "en"
 	}
@@ -185,7 +185,7 @@ func SwitchLanguage(langCode string) error {
 	}
 
 	// Update viper config
-	viper.Set("ui_language", langCode)
+	viper.Set("interface_lang", langCode)
 	if err := viper.WriteConfig(); err != nil {
 		// If config file doesn't exist, try to create it
 		if err := viper.SafeWriteConfig(); err != nil {

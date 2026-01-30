@@ -2,150 +2,214 @@
 
 > *"¡N-No es como si hubiera hecho esta herramienta de subtítulos para ti ni nada... B-Baka!"*
 
-**BakaSub** es una herramienta de traducción de subtítulos ultrarrápida impulsada por IA, construida para usuarios avanzados que exigen **cero desincronización** y **estética nativa de terminal**. Nacido de la frustración con interfaces web torpes y desastres de sincronización de subtítulos, BakaSub trae automatización de traducción de nivel profesional a tu terminal.
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/lsilvatti)
 
-Piensa en ello como `btop` se encuentra con `lazygit`, pero para subtítulos. Sin necesidad de mouse, sin GUI hinchada, solo eficiencia pura orientada al teclado.
+**BakaSub** es una herramienta de traducción de subtítulos con IA para usuarios avanzados que exigen **cero desincronización** y **estética nativa de terminal**. Nació de la frustración con interfaces web torpes y desastres de timing.
+
+Piensa en `btop` + `lazygit`, pero para subtítulos. Sin mouse, sin hinchazón—solo eficiencia con teclado.
+
+---
+
+## 📋 Índice
+
+- [Características](#-características)
+- [Instalación](#-instalación)
+- [Dependencias](#-dependencias)
+- [Inicio Rápido](#-inicio-rápido)
+- [Guía de Uso](#-guía-de-uso)
+- [Configuración](#-configuración)
+- [Solución de Problemas](#-solución-de-problemas)
+- [Para Desarrolladores](#-para-desarrolladores)
+- [Apoyo](#-apoyo)
+
+---
 
 ## ✨ Características
 
-- **🤖 Traducción Impulsada por IA**: Soporte para OpenRouter, Google Gemini, OpenAI o LLM local
-- **⚡ Protocolo Cero Desincronización**: Contexto de ventana deslizante + puertas de calidad aseguran sincronización perfecta
-- **💾 Caché Inteligente**: Coincidencia difusa basada en SQLite te ahorra dinero en traducciones repetidas
-- **🎨 TUI Neón Nativo**: Interfaz inspirada en btop que se ve *chef's kiss* en tu terminal
-- **📦 Binario Primero**: Ejecutable único, sin dependencias (excepto FFmpeg/MKVToolNix)
-- **🔄 Modo Observador**: Suelta archivos en una carpeta, vete, deja que BakaSub se encargue
-- **🛠️ Caja de Herramientas MKV**: Extraer, muxear, editar encabezados, gestionar fuentes - todo en un lugar
-- **🌍 Trilingüe**: Interfaz disponible en English, Português (BR) y Español
+| Característica | Qué hace |
+|----------------|----------|
+| 🤖 **Traducción con IA** | Soporta OpenRouter, Google Gemini, OpenAI y LLMs locales (Ollama/LMStudio) |
+| ⚡ **Cero Desinc** | Ventana deslizante + quality gates mantienen timing perfecto |
+| 💾 **Caché Inteligente** | Fuzzy matching con SQLite—¿por qué pagar dos veces por la misma línea? |
+| 🎨 **TUI Neón** | Una interfaz de terminal tan bonita que olvidarás que las GUIs existen |
+| 📦 **Binario Único** | Un archivo, sin Python, sin Node, sin drama |
+| 🔄 **Watch Mode** | Suelta archivos en una carpeta, BakaSub se encarga del resto. ¡Magia! ✨ |
+| 🛠️ **Toolbox MKV** | Extraer, muxear, editar headers, gestionar fuentes—todo en un lugar |
+| 🌍 **Interfaz Trilingüe** | English, Português (BR), Español |
 
-### ¿Por Qué BakaSub?
-
-| 💀 Forma Antigua | ✨ Forma BakaSub |
-|------------------|------------------|
-| Exportar subtítulos manualmente | Auto-extrae del MKV |
-| Copiar y pegar en traductor web | Llamadas de API por lotes con contexto |
-| Corregir desincronización durante 2 horas | Protocolo anti-desincronización integrado |
-| Remuxear manualmente en video | Muxeo en un paso con respaldos |
-| Esperar no haber arruinado nada | Puerta de calidad detecta errores |
+---
 
 ## 🚀 Instalación
 
-### Instalación Rápida (Linux/macOS)
+### Instalación en Una Línea (Linux/macOS)
+
+*"B-Bueno, te lo voy a hacer fácil... ¡pero solo esta vez!"*
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lsilvatti/bakasub/main/install.sh | bash
 ```
 
-### Instalación Manual
+### Descarga Manual
 
-1. **Descarga** el último release para tu plataforma:
-   - [Linux (AMD64)](https://github.com/lsilvatti/bakasub/releases/latest/download/bakasub-linux-amd64)
-   - [Windows (AMD64)](https://github.com/lsilvatti/bakasub/releases/latest/download/bakasub-windows-amd64.exe)
-   - [macOS (Intel)](https://github.com/lsilvatti/bakasub/releases/latest/download/bakasub-darwin-amd64)
-   - [macOS (Apple Silicon)](https://github.com/lsilvatti/bakasub/releases/latest/download/bakasub-darwin-arm64)
+Elige tu plataforma, descarga y listo:
 
-2. **Hazlo ejecutable** (Linux/macOS):
-   ```bash
-   chmod +x bakasub-*
-   sudo mv bakasub-* /usr/local/bin/bakasub
-   ```
+| Plataforma | Link de Descarga |
+|------------|------------------|
+| 🐧 Linux (AMD64) | [bakasub-linux-amd64](https://github.com/lsilvatti/bakasub/releases/latest/download/bakasub-linux-amd64) |
+| 🪟 Windows (AMD64) | [bakasub-windows-amd64.exe](https://github.com/lsilvatti/bakasub/releases/latest/download/bakasub-windows-amd64.exe) |
+| 🍎 macOS (Intel) | [bakasub-darwin-amd64](https://github.com/lsilvatti/bakasub/releases/latest/download/bakasub-darwin-amd64) |
+| 🍎 macOS (Apple Silicon) | [bakasub-darwin-arm64](https://github.com/lsilvatti/bakasub/releases/latest/download/bakasub-darwin-arm64) |
 
-3. **Verifica la instalación**:
-   ```bash
-   bakasub --version
-   ```
+**Setup Linux/macOS:**
+```bash
+chmod +x bakasub-*
+sudo mv bakasub-* /usr/local/bin/bakasub
+bakasub --version  # ¡Verifica que funciona!
+```
 
-### Dependencias
+**Windows:** Pon el `.exe` en el PATH o ejecútalo directamente.
 
-BakaSub necesita estas herramientas externas (el asistente ofrecerá descargarlas):
+---
 
-- **FFmpeg**: Procesamiento de medios
-- **MKVToolNix**: Manipulación de contenedores
+## 🔧 Dependencias
+
+BakaSub necesita dos herramientas externas. *"¡N-No me mires así! Tienes que instalarlas tú mismo... ¡no es como si pudiera hacer todo por ti!"*
+
+**DEBES instalarlas antes de ejecutar BakaSub:**
+
+| Herramienta | Qué hace | Descarga |
+|-------------|----------|----------|
+| **FFmpeg** | Procesamiento de medios, extracción de streams | [ffmpeg.org](https://ffmpeg.org/download.html) |
+| **MKVToolNix** | Manipulación de containers MKV | [mkvtoolnix.download](https://mkvtoolnix.download/downloads.html) |
+
+### Comandos Rápidos de Instalación
+
+**Ubuntu/Debian:**
+```bash
+sudo apt install ffmpeg mkvtoolnix
+```
+
+**Fedora:**
+```bash
+sudo dnf install ffmpeg mkvtoolnix
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -S ffmpeg mkvtoolnix-cli
+```
+
+**macOS (Homebrew):**
+```bash
+brew install ffmpeg mkvtoolnix
+```
+
+**Windows:** Descarga los instaladores de los links arriba, o usa [Chocolatey](https://chocolatey.org/):
+```powershell
+choco install ffmpeg mkvtoolnix
+```
+
+---
 
 ## 🎬 Inicio Rápido
 
-### Primera Ejecución (Asistente de Configuración)
-
-En el primer lanzamiento, BakaSub te guía a través de:
-
-1. **Configuración del Proveedor de IA**: Elige tu servicio (OpenRouter recomendado) e ingresa la clave API
-2. **Verificación de Dependencias**: Descarga automáticamente FFmpeg/MKVToolNix si faltan
-3. **Valores Predeterminados**: Establece tu idioma objetivo y modelo preferido
+### Primera Ejecución
 
 ```bash
 bakasub
 ```
 
-### Flujo Básico: Modo Proceso Completo
+En la primera ejecución, un wizard te guía por:
 
-El caso de uso más común - traducir todo de una vez:
+1. **Proveedor de IA** — Elige tu servicio e ingresa la API key
+2. **Verificación de Dependencias** — Verifica que FFmpeg y MKVToolNix estén instalados
+3. **Predeterminados** — Define idioma objetivo y modelo preferido
 
-1. Inicia BakaSub
-2. Ingresa la ruta a tu archivo o carpeta MKV
-3. Selecciona el modo **"Proceso Completo"**
-4. Presiona **Enter** para iniciar
-5. Toma un café mientras BakaSub hace su magia ☕
+*"¡S-Solo te estoy ayudando porque claramente no puedes solo!"*
 
-### Modo Observador (Configúralo y Olvídalo)
+### Flujo Básico
 
-Perfecto para automatización o procesamiento por lotes:
+**Modo Proceso Completo** — El caso de uso más común:
+
+1. Ejecuta `bakasub`
+2. Ingresa la ruta al archivo/carpeta MKV
+3. Selecciona **Proceso Completo**
+4. Presiona **Enter**
+5. ☕ Tómate un café. Te lo ganaste.
+
+**Watch Mode** — Configúralo y olvídalo:
 
 1. Crea una carpeta (ej: `~/anime-entrante`)
-2. En BakaSub, selecciona **"Modo Observador"**
-3. Apúntalo a tu carpeta
-4. Suelta archivos en la carpeta
-5. BakaSub procesa automáticamente nuevos archivos a medida que aparecen
+2. Selecciona **Watch Mode** en BakaSub
+3. Apunta a tu carpeta
+4. Suelta archivos MKV ahí cuando quieras
+5. BakaSub procesa automáticamente nuevos archivos
 
-*Como la carpeta de descargas de un adulto responsable, pero que realmente se limpia sola.*
+*Como una carpeta de descargas de adulto responsable que realmente se limpia sola.*
 
-## ⌨️ Atajos de Teclado
+---
 
-### Panel Principal
+## 📖 Guía de Uso
+
+### Teclas del Dashboard
 
 | Tecla | Acción |
 |-------|--------|
-| `1-4` | Lanzar módulos (Extraer, Traducir, Muxear, Revisar) |
-| `5-8` | Abrir caja de herramientas (Editor de Encabezado, Glosario, etc.) |
+| `1` | Extraer pistas del MKV |
+| `2` | Traducir archivo de subtítulos |
+| `3` | Muxear pistas en MKV |
+| `4` | Editor de revisión manual |
+| `5` | Editar flags/metadatos de pista |
+| `6` | Gestionar adjuntos (fuentes) |
+| `7` | Remuxeador rápido |
+| `8` | Glosario del proyecto |
 | `m` | Cambiar modelo de IA |
 | `c` | Abrir configuración |
 | `q` | Salir |
 
-### Configuración de Trabajo
+### Teclas de Configuración de Job
 
 | Tecla | Acción |
 |-------|--------|
-| `Enter` | Iniciar trabajo |
-| `d` | Ejecución de prueba (estimación de costo) |
+| `Enter` | Iniciar el job |
+| `d` | Dry run (estimación de costo sin llamar API) |
 | `r` | Resolver conflictos de pista |
-| `Esc` | Volver al panel |
+| `Esc` | Volver al dashboard |
 
-### Editor de Revisión Manual
+### Teclas del Editor de Revisión
 
 | Tecla | Acción |
 |-------|--------|
 | `↑/↓` | Navegar líneas |
-| `Enter` | Confirmar edición y siguiente |
+| `Enter` | Confirmar edición, ir a la siguiente |
 | `Ctrl+S` | Guardar archivo |
-| `g` | Ir al número de línea |
+| `g` | Ir a número de línea |
 | `Esc` | Salir del editor |
 
-### Editor de Encabezado
+### Módulos del Toolbox
 
-| Tecla | Acción |
-|-------|--------|
-| `↑/↓` | Navegar pistas |
-| `Space` | Alternar banderas (Predeterminado/Forzado) |
-| `Enter` | Aplicar cambios |
-| `Esc` | Cancelar |
+| # | Módulo | Descripción |
+|---|--------|-------------|
+| 1 | **Extraer Pistas** | Extrae subtítulos o audio del MKV |
+| 2 | **Traducir Subtítulo** | Traducción con IA usando tu configuración |
+| 3 | **Muxear Container** | Combina pistas en un nuevo MKV |
+| 4 | **Revisión Manual** | Editor split-view para correcciones |
+| 5 | **Editor de Header** | Define flags de pista predeterminada/forzada |
+| 6 | **Adjuntos** | Agrega/elimina fuentes del MKV |
+| 7 | **Remuxeador** | Agrega/elimina pistas rápido |
+| 8 | **Glosario** | Define términos para traducción consistente entre episodios |
+
+---
 
 ## 🎭 Configuración
 
-La configuración está en `~/.config/bakasub/config.json`. Ajustes clave:
+La config está en `~/.config/bakasub/config.json`
 
 ```json
 {
   "api_provider": "openrouter",
   "api_key": "sk-or-...",
-  "target_lang": "pt-br",
+  "target_lang": "es",
   "remove_hi_tags": true,
   "global_temp": 0.3,
   "touchless_mode": false,
@@ -155,105 +219,119 @@ La configuración está en `~/.config/bakasub/config.json`. Ajustes clave:
 
 ### Perfiles de Prompt
 
-BakaSub viene con prompts especializados para diferentes tipos de contenido:
+Diferentes contenidos necesitan diferentes estilos de traducción:
 
-- **Anime**: Preserva honoríficos (-san, -kun), mantiene nombres de ataques
-- **Película**: Tono formal, modismos localizados
-- **Serie**: Estilo equilibrado para contenido episódico
-- **Documental**: Precisión técnica sobre creatividad
-- **YouTube**: Tono casual, consciente de jerga de internet
+| Perfil | Mejor para |
+|--------|------------|
+| **anime** | Preserva honoríficos (-san, -kun), mantiene nombres de ataques |
+| **movie** | Tono formal, expresiones idiomáticas localizadas |
+| **series** | Estilo equilibrado para contenido episódico |
+| **documentary** | Precisión técnica sobre creatividad |
+| **youtube** | Tono casual, consciente de jerga de internet |
 
-Puedes clonar perfiles de fábrica y personalizarlos.
+Clona perfiles de fábrica para personalizarlos. *"Yo hice los predeterminados, pero puedes cambiarlos... ¡si crees que sabes más!"*
 
-## 🛠️ Módulos de la Caja de Herramientas
+### Idioma de la Interfaz
 
-### Operaciones Independientes
+BakaSub soporta: 🇬🇧 English (predeterminado) · 🇧🇷 Português · 🇪🇸 Español
 
-1. **Extraer Pistas**: Extraer subtítulos/audio del MKV
-2. **Traducir Subtítulo**: Traducción de IA con tus ajustes
-3. **Muxear Contenedor**: Combinar pistas en MKV
-4. **Revisión Manual**: Editor de vista dividida para correcciones
+Cambia en `Configuración > General > Idioma de Interfaz`
 
-### Herramientas MKVToolNix
-
-5. **Editar Banderas/Metadatos**: Establecer pistas predeterminadas, subtítulos forzados
-6. **Gestionar Adjuntos**: Agregar/eliminar fuentes del MKV
-7. **Agregar/Eliminar Pistas**: Remuxeador rápido con selección de pistas
-8. **Glosario del Proyecto**: Definir términos para traducción consistente
-
-## 🌍 Localización
-
-La interfaz de BakaSub soporta:
-
-- 🇬🇧 **English** (predeterminado)
-- 🇧🇷 **Português (Brasil)**
-- 🇪🇸 **Español**
-
-Cambia en `Configuración > General > Idioma de Interfaz`.
+---
 
 ## 🐛 Solución de Problemas
 
 ### "Error de API 401"
 
-Tu clave API es inválida o expiró. Ejecuta `bakasub` → `c` (config) → Proveedores de IA → reingresa la clave.
+Tu API key es inválida o expiró.
+
+→ Presiona `c` → Proveedores de IA → Reingresa tu key
 
 ### "Conflicto de Pista Detectado"
 
-Múltiples pistas de subtítulos coinciden con tu idioma objetivo. BakaSub necesita que elijas:
-- Presiona `r` en Configuración de Trabajo
-- Selecciona la pista de **diálogo completo** (generalmente el tamaño de archivo más grande)
-- Las pistas de Señales/Canciones son típicamente más pequeñas
+Múltiples pistas de subtítulos coinciden con tu idioma. BakaSub necesita que elijas:
+
+→ Presiona `r` en Configuración de Job  
+→ Selecciona la pista de **diálogo completo** (generalmente archivo más grande)  
+→ Pistas de Signs/Songs son típicamente más pequeñas
 
 ### "FFmpeg No Encontrado"
 
-Instala FFmpeg:
-- **Ubuntu/Debian**: `sudo apt install ffmpeg`
-- **macOS**: `brew install ffmpeg`
-- **Windows**: Descarga desde [ffmpeg.org](https://ffmpeg.org)
+Instala FFmpeg usando los comandos en la sección [Dependencias](#-dependencias) arriba.
 
-O deja que el Asistente de Configuración lo descargue por ti.
+*"¡Literalmente te di los comandos... solo cópialos y pégalos! ¡Baka!"*
 
 ### Subtítulos Desincronizados
 
-Esto NUNCA debería suceder gracias a nuestro protocolo anti-desincronización. Si sucede:
-1. Verifica que seleccionaste la pista de subtítulos correcta (Señales/Canciones ≠ Diálogo Completo)
-2. Verifica que el MKV de origen no esté ya corrupto (`mkvmerge -i file.mkv`)
-3. Abre una issue en GitHub con la información del archivo
+*"¡Esto NUNCA debería pasar. Mi código es perfecto!"* ...pero si pasa:
 
-## 🤝 Contribuyendo
+1. Verifica que seleccionaste la pista correcta (Signs/Songs ≠ Diálogo Completo)
+2. Verifica que el MKV fuente no esté corrupto: `mkvmerge -i archivo.mkv`
+3. [Abre un issue](https://github.com/lsilvatti/bakasub/issues) con info del archivo
 
-¿Encontraste un bug? ¿Quieres una característica? ¡Las contribuciones son bienvenidas!
+---
 
-1. Haz fork del repositorio
-2. Crea una rama de característica (`git checkout -b caracteristica-genial`)
-3. Haz commit de tus cambios (`git commit -am 'Agrega característica genial'`)
-4. Haz push a la rama (`git push origin caracteristica-genial`)
-5. Abre un Pull Request
+## 👨‍💻 Para Desarrolladores
 
-### Configuración de Desarrollo
+*"Oh, ¿quieres contribuir? Q-Qué osadía..."*
+
+### Compilando desde el Código Fuente
+
+**Requisitos:** Go 1.22+
 
 ```bash
 git clone https://github.com/lsilvatti/bakasub.git
 cd bakasub
 go mod download
-make build-linux
-./bin/bakasub-linux-amd64
 ```
+
+### Comandos de Build
+
+```bash
+make build-linux     # Linux AMD64
+make build-windows   # Windows AMD64
+make build-macos     # macOS Intel + ARM
+make build-all       # Todas las plataformas
+make install         # Build + instala en /usr/local/bin
+```
+
+### Desarrollo
+
+```bash
+make dev    # Ejecuta sin compilar
+make test   # Ejecuta tests
+make fmt    # Formatea código
+make lint   # Ejecuta linter
+```
+
+### Contribuyendo
+
+1. Haz fork del repo
+2. Crea una rama: `git checkout -b caracteristica-genial`
+3. Commit tus cambios: `git commit -am 'Agrega característica genial'`
+4. Push: `git push origin caracteristica-genial`
+5. Abre un Pull Request
+
+---
 
 ## 📜 Licencia
 
-Licencia MIT - ver [LICENSE](LICENSE) para detalles.
+Licencia MIT — Haz lo que quieras, solo no me culpes.
+
+---
 
 ## 💖 Apoyo
 
-¿Te gusta BakaSub? Considera apoyar el desarrollo:
+*"N-No es como si necesitara tu apoyo ni nada... ¡pero si insistes!"*
 
-- ⭐ Dale una estrella al repositorio
-- ☕ [Cómprame un café](https://ko-fi.com/lsilvatti) *(también aceptamos caricias)*
-- 📢 Comparte con amigos que sufren del infierno de subtítulos
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/lsilvatti)
+
+- ⭐ Dale una estrella a este repo
+- 📢 Comparte con amigos sufriendo con subtítulos malos
+- 🐛 Reporta bugs (¡pero sé amable!)
 
 ---
 
 **Hecho con 💜 por alguien que vio demasiado anime con subtítulos terribles**
 
-*"Omae wa mou... traducido." - BakaSub, probablemente*
+*"Omae wa mou... traducido." — BakaSub, probablemente*

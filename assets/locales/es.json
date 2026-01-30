@@ -147,6 +147,20 @@
       "quit": "SALIR"
     }
   },
+  "picker": {
+    "title_directory": "SELECCIONAR DIRECTORIO",
+    "title_file": "SELECCIONAR ARCHIVO",
+    "title_both": "SELECCIONAR ARCHIVO O DIRECTORIO",
+    "mode_label": "Modo:",
+    "mode_directory": "DIRECTORIO",
+    "mode_file": "ARCHIVO",
+    "mode_both": "ARCHIVO/DIR",
+    "allowed_label": "Permitido:",
+    "hotkey_navigate": "Navegar",
+    "hotkey_select": "Seleccionar/Abrir",
+    "hotkey_toggle": "Alternar Modo",
+    "hotkey_cancel": "Cancelar"
+  },
   "job": {
     "title": "CONFIGURACIÓN DE TRABAJO",
     "batch_label": "Lote: %d Archivos",
@@ -165,7 +179,19 @@
       "media_type": "TIPO DE MEDIO:",
       "target_lang": "IDIOMA DESTINO:",
       "glossary": "GLOSARIO:",
+      "glossary_terms": "%d términos",
       "glossary_auto": "Auto-Inyectar (Nombre de la Serie)"
+    },
+    "media_types": {
+      "anime": "Anime",
+      "movie": "Película",
+      "series": "Serie/Show",
+      "documentary": "Documental",
+      "youtube": "YouTube/Web"
+    },
+    "mux_modes": {
+      "replace": "reemplazar",
+      "new-file": "nuevo archivo"
     },
     "muxing": {
       "title": "SALIDA DE MUXEO",
@@ -246,6 +272,17 @@
       "remove_hi_tags": "ELIMINAR ETIQUETAS DE DISCAPACITADOS AUDITIVOS",
       "remove_hi_help": "(ej: [Música], (Suspiro))",
       "auto_update": "AUTO-VERIFICAR ACTUALIZACIONES (API GitHub)"
+    },
+    "touchless": {
+      "title": "REGLAS DEL MODO SIN CONTACTO (EJECUCIÓN AUTOMÁTICA)",
+      "multi_sub": "SI SE ENCUENTRAN MÚLTIPLES SUBTÍTULOS:",
+      "largest": "SELECCIONAR MAYOR (Probable diálogo completo)",
+      "smallest": "SELECCIONAR MENOR (Probable Señales/Canciones)",
+      "skip": "OMITIR ARCHIVO (Registrar error y continuar lote)",
+      "default_profile": "PERFIL DE CONTEXTO PREDETERMINADO:",
+      "mux_strategy": "ESTRATEGIA DE MUXING:",
+      "replace": "Reemplazar Original (Backup .old)",
+      "new_file": "Crear Nuevo Archivo"
     },
     "providers": {
       "active_provider": "PROVEEDOR ACTIVO",

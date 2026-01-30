@@ -6,6 +6,28 @@ import (
 
 // Msg types for job setup flow
 type (
+	// MsgDirectoryDetected is sent when a directory with multiple MKVs is found
+	MsgDirectoryDetected struct {
+		Path     string
+		MKVCount int
+		IsDir    bool
+	}
+
+	// MsgBatchModeSelected is sent when user chooses batch or single file mode
+	MsgBatchModeSelected struct {
+		BatchMode bool
+	}
+
+	// MsgSelectSingleFile is sent when user wants to select a single file from directory
+	MsgSelectSingleFile struct {
+		Files []string
+	}
+
+	// MsgSingleFileSelected is sent when user selects a single file
+	MsgSingleFileSelected struct {
+		Path string
+	}
+
 	// MsgAnalysisComplete is sent when directory analysis finishes
 	MsgAnalysisComplete struct {
 		Files   []AnalyzedFile
@@ -46,11 +68,19 @@ type (
 		Error   error
 	}
 
-	// MsgStartJob is sent when user confirms job start
+	// MsgStartJob is sent when user confirms job start (internal)
 	MsgStartJob struct{}
 
-	// MsgCancelJob is sent when user cancels the setup
+	// MsgCancelJob is sent when user cancels the setup (internal)
 	MsgCancelJob struct{}
+
+	// StartJobMsg is sent to parent when job should start with config
+	StartJobMsg struct {
+		JobConfig JobConfig
+	}
+
+	// CancelledMsg is sent to parent when job setup is cancelled
+	CancelledMsg struct{}
 )
 
 // AnalyzedFile represents a single analyzed MKV file

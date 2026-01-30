@@ -31,7 +31,6 @@ type Config struct {
 	InterfaceLang string `json:"interface_lang" mapstructure:"interface_lang"` // en, pt-br, es
 	TargetLang    string `json:"target_lang" mapstructure:"target_lang"`       // PT-BR, EN-US, etc.
 	BinPath       string `json:"bin_path" mapstructure:"bin_path"`             // Path to binaries directory
-	KofiUsername  string `json:"kofi_username" mapstructure:"kofi_username"`   // Ko-fi username for donations (default: "bakasub")
 
 	// AI Provider Settings
 	AIProvider    string  `json:"ai_provider" mapstructure:"ai_provider"`       // openrouter, gemini, openai, local
@@ -172,17 +171,17 @@ Output Format: Return ONLY valid JSON array with the same structure as input.`,
 // Default returns a Config with sensible defaults
 func Default() *Config {
 	return &Config{
-		InterfaceLang: "en",
-		TargetLang:    "PT-BR",
-		BinPath:       "./bin",
-		KofiUsername:  "bakasub", // Default Ko-fi username
-		AIProvider:    "openrouter",
-		APIKey:        "",
-		LocalEndpoint: "http://localhost:11434",
-		Model:         "google/gemini-flash-1.5",
-		Temperature:   0.3,
-		RemoveHITags:  true,
-		TouchlessMode: false,
+		InterfaceLang:     "en",
+		TargetLang:        "PT-BR",
+		BinPath:           "./bin",
+		AIProvider:        "openrouter",
+		APIKey:            "",
+		LocalEndpoint:     "http://localhost:11434",
+		Model:             "google/gemini-flash-1.5",
+		Temperature:       0.3,
+		GlobalTemperature: 0.3,
+		RemoveHITags:      true,
+		TouchlessMode:     false,
 		TouchlessRules: TouchlessRules{
 			MultipleSubtitles: "largest",
 			DefaultProfile:    "anime",
@@ -256,12 +255,14 @@ func (c *Config) Save() error {
 	// Set all values in viper
 	viper.Set("interface_lang", c.InterfaceLang)
 	viper.Set("target_lang", c.TargetLang)
+	viper.Set("bin_path", c.BinPath)
 	viper.Set("ai_provider", c.AIProvider)
 	viper.Set("api_key", c.APIKey)
 	viper.Set("local_endpoint", c.LocalEndpoint)
 	viper.Set("model", c.Model)
 	viper.Set("temperature", c.Temperature)
 	viper.Set("remove_hi_tags", c.RemoveHITags)
+	viper.Set("global_temperature", c.GlobalTemperature)
 	viper.Set("touchless_mode", c.TouchlessMode)
 	viper.Set("touchless_rules", c.TouchlessRules)
 	viper.Set("prompt_profiles", c.PromptProfiles)

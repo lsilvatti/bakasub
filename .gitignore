@@ -5,9 +5,7 @@ bin/
 *.dll
 *.so
 *.dylib
-bakasub
-bakasub.exe
-
+RELEASING.md
 # Test binary, built with `go test -c`
 *.test
 
