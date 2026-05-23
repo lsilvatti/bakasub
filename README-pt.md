@@ -8,6 +8,8 @@ Hmph! Então você encontrou o repositório de verdade do **BakaSub**, e não s�
 
 > **Presta atenção!** Se você só quer usar o Bakasub, este é o único repositório que importa. Os repositórios de backend e frontend são voltados para desenvolvimento.
 
+Se você quiser ver a separação exata entre configuração do usuário e cabeamento de infraestrutura, consulte [CONFIGURATION.md](CONFIGURATION.md).
+
 ## ✨ O Que o Bakasub Faz de Verdade
 
 O Bakasub é um app local para fluxo de legendas focado em tradução assistida por IA e manipulação de trilhas de vídeo.

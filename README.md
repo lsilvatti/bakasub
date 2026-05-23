@@ -8,6 +8,8 @@ Hmph! So you found the real **BakaSub** repository, not just one of its nerdy in
 
 > **Listen up!** If you just want to use Bakasub, this is the only repository you need. The backend and frontend repositories are developer-facing.
 
+Need a precise split between user settings and infrastructure wiring? See [CONFIGURATION.md](CONFIGURATION.md).
+
 ## ✨ What Bakasub Actually Does
 
 Bakasub is a local subtitle workflow app focused on AI-assisted translation and video subtitle handling.
