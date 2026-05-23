@@ -1,0 +1,46 @@
+name: bakasub
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: bakasub_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-bakasub}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-bakasub}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    image: ${BACKEND_IMAGE:?set BACKEND_IMAGE in release.env}
+    container_name: bakasub_backend
+    pull_policy: ${IMAGE_PULL_POLICY:-always}
+    ports:
+      - "${BACKEND_HOST_PORT:-8080}:8080"
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-bakasub}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ${VIDEO_DIR:?set VIDEO_DIR in .env}:/videos
+    restart: unless-stopped
+
+  frontend:
+    image: ${FRONTEND_IMAGE:?set FRONTEND_IMAGE in release.env}
+    container_name: bakasub_frontend
+    pull_policy: ${IMAGE_PULL_POLICY:-always}
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_HOST_PORT:-3000}:80"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

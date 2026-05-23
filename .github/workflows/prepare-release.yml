@@ -1,0 +1,51 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Product version to write into VERSION and release.env
+        required: true
+      backend_image:
+        description: Backend image ref to resolve and pin, for example ghcr.io/owner/bakasub-backend:sha-abcdef1
+        required: true
+      frontend_image:
+        description: Frontend image ref to resolve and pin, for example ghcr.io/owner/bakasub-frontend:sha-1234567
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    name: Prepare Release Manifest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Update release manifest
+        run: |
+          sh scripts/update-release-manifest.sh \
+            --version "${{ inputs.version }}" \
+            --backend-image "${{ inputs.backend_image }}" \
+            --frontend-image "${{ inputs.frontend_image }}"
+
+      - name: Create release preparation pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore: prepare release v${{ inputs.version }}"
+          branch: "release/prepare-v${{ inputs.version }}"
+          title: "Prepare release v${{ inputs.version }}"
+          body: |
+            Updates VERSION and release.env using immutable image digests resolved from:
+            - backend: `${{ inputs.backend_image }}`
+            - frontend: `${{ inputs.frontend_image }}`
+          add-paths: |
+            VERSION
+            release.env

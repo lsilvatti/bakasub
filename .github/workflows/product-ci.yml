@@ -1,0 +1,80 @@
+name: Product CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-stack:
+    name: Validate Stack Configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate VERSION file
+        run: test -s VERSION
+
+      - name: Validate release manifest version
+        run: test "$(grep '^BAKASUB_VERSION=' release.env | cut -d= -f2-)" = "$(cat VERSION)"
+
+      - name: Validate immutable image pins
+        run: |
+          for key in BACKEND_IMAGE FRONTEND_IMAGE; do
+            value=$(grep "^${key}=" release.env | cut -d= -f2-)
+            case "$value" in
+              *@sha256:*) ;;
+              *)
+                echo "$key must use an immutable digest pin: $value"
+                exit 1
+                ;;
+            esac
+          done
+
+      - name: Render Docker Compose configuration
+        run: docker compose --env-file release.env --env-file .env.ci config
+
+  smoke-test-release:
+    name: Smoke Test Pinned Release
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Smoke test stack
+        run: ./scripts/smoke-test.sh
+
+  validate-release-tag:
+    name: Validate Release Tag
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure VERSION matches tag
+        run: test "v$(cat VERSION)" = "${GITHUB_REF_NAME}"
+
+      - name: Ensure release manifest does not use placeholder digests
+        run: |
+          placeholder=sha256:0000000000000000000000000000000000000000000000000000000000000000
+          for key in BACKEND_IMAGE FRONTEND_IMAGE; do
+            value=$(grep "^${key}=" release.env | cut -d= -f2-)
+            case "$value" in
+              *"$placeholder")
+                echo "$key still uses the placeholder digest"
+                exit 1
+                ;;
+            esac
+          done
+
+      - name: Ensure release manifest matches VERSION
+        run: test "$(grep '^BAKASUB_VERSION=' release.env | cut -d= -f2-)" = "$(cat VERSION)"
