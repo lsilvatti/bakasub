@@ -3,25 +3,15 @@
 set -eu
 
 release_env=${RELEASE_ENV:-release.env}
-runtime_env=${RUNTIME_ENV:-.env.ci}
 succeeded=0
-
-read_env_value() {
-  key=$1
-  file=$2
-
-  if [ ! -f "$file" ]; then
-    return 1
-  fi
-
-  grep "^${key}=" "$file" | tail -n 1 | cut -d= -f2-
-}
-
-backend_host_port=${BACKEND_HOST_PORT:-$(read_env_value BACKEND_HOST_PORT "$runtime_env" || printf '%s' 8080)}
-frontend_host_port=${FRONTEND_HOST_PORT:-$(read_env_value FRONTEND_HOST_PORT "$runtime_env" || printf '%s' 3000)}
+frontend_host_port=
 
 compose() {
-  docker compose --env-file "$release_env" --env-file "$runtime_env" "$@"
+  docker compose --env-file "$release_env" "$@"
+}
+
+resolve_frontend_port() {
+  compose port frontend 80 | awk -F: 'END { print $NF }'
 }
 
 cleanup() {
@@ -34,6 +24,12 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 compose up -d
+frontend_host_port=$(resolve_frontend_port)
+
+if [ -z "$frontend_host_port" ]; then
+  echo "Could not determine the published frontend port" >&2
+  exit 1
+fi
 
 wait_for() {
   url=$1
@@ -53,8 +49,8 @@ wait_for() {
   return 1
 }
 
-wait_for "http://127.0.0.1:${backend_host_port}/api/v1/health" "backend API"
 wait_for "http://127.0.0.1:${frontend_host_port}/" "frontend"
+wait_for "http://127.0.0.1:${frontend_host_port}/api/v1/health" "backend API through frontend proxy"
 
 succeeded=1
 echo "Smoke test passed"

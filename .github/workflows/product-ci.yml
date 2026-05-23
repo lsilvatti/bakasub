@@ -37,7 +37,7 @@ jobs:
           done
 
       - name: Render Docker Compose configuration
-        run: docker compose --env-file release.env --env-file .env.ci config
+        run: docker compose --env-file release.env config
 
   smoke-test-release:
     name: Smoke Test Pinned Release

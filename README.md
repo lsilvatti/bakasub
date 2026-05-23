@@ -1,6 +1,6 @@
 # BakaSub - The Full App 🌸✨
 
-[Português do Brasil](README-pt.md)
+[Português   do Brasil](README-pt.md)
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=000000)](https://buymeacoffee.com/leosilvatto)
 
@@ -42,7 +42,7 @@ You do need:
 
 1. **Docker Engine** with the Compose plugin, or **Docker Desktop**.
 2. A **released version** of this repository. Prefer a GitHub Release or a tagged version, not a random development commit.
-3. An **absolute path** on your machine containing the videos and subtitles you want Bakasub to see.
+3. A local **`library/` folder** inside this repository containing the videos and subtitles you want Bakasub to see.
 4. An **OpenRouter API key**.
 5. A **TMDB access token**.
 
@@ -59,45 +59,37 @@ Use a tagged release of this repository.
 
 Why? Because public releases pin the backend and frontend container images in `release.env`. A work-in-progress checkout may still contain placeholder image digests.
 
-### 2. Create your local runtime config
+### 2. Put your media inside `library/`
 
-Copy the example file:
+Create the local library folder if it does not exist yet:
 
 ```bash
-cp .env.example .env
+mkdir -p library
 ```
 
-Then edit `.env` and set at least this value:
+Then copy or symlink your media into it. Example:
 
-```env
-VIDEO_DIR=/absolute/path/to/your/videos
+```bash
+ln -s /absolute/path/to/your/videos library/videos
 ```
 
-Optional settings you can change there too:
-
-- `FRONTEND_HOST_PORT` if `3000` is busy
-- `BACKEND_HOST_PORT` if `8080` is busy
-- `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` if you want custom local database credentials for the composed stack
+The official product stack mounts `./library` into the backend container as `/videos`. The app-level browsing root is then saved in the database through **Settings**, not via environment variables.
 
 ### 3. Start the application
 
 ```bash
-docker compose --env-file release.env --env-file .env up -d
+sh scripts/up.sh
 ```
 
 This starts:
 
-- the frontend at `http://localhost:3000`
-- the backend API at `http://localhost:8080/api/v1`
+- the frontend on an automatically assigned local port
+- the backend behind the frontend proxy at `/api/v1`
 - the internal PostgreSQL database used by Bakasub
 
 ### 4. Open Bakasub in the browser
 
-Go to:
-
-```text
-http://localhost:3000
-```
+The script prints the exact local URL after startup.
 
 ### 5. Finish the first-time setup inside the app
 
@@ -105,6 +97,7 @@ Open the **Settings** page and configure:
 
 - `OpenRouter API Key`
 - `TMDB Access Token`
+- `Library Root` if you want to limit the browser to a subfolder such as `/videos/videos`
 
 Save both values. Until they are saved, the **Translate** page stays locked.
 
@@ -123,40 +116,41 @@ If you want the cleanest first run, do this:
 
 1. Start the stack.
 2. Open **Settings** and save your OpenRouter and TMDB credentials.
-3. Go to **Models & Presets** and mark your favorite models.
-4. Open **Extract** and inspect a video from your mounted `VIDEO_DIR`.
-5. Open **Translate**, link TMDB metadata if helpful, run a pre-flight estimate, then submit the translation.
-6. Watch the live progress dialog and confirm the result in **Logs & Jobs**.
+3. Confirm the **Library Root** in Settings. The default is `/videos`.
+4. Go to **Models & Presets** and mark your favorite models.
+5. Open **Extract** and inspect a video from the mounted library.
+6. Open **Translate**, link TMDB metadata if helpful, run a pre-flight estimate, then submit the translation.
+7. Watch the live progress dialog and confirm the result in **Logs & Jobs**.
 
 ## 🗂️ What Bakasub Can See
 
-Bakasub only sees the folder mounted as `VIDEO_DIR`.
+Bakasub only sees the folder mounted as `./library`, which appears inside the container as `/videos`.
 
 That means:
 
-- if a file is outside that directory, it will not show up in the app
-- if the path is wrong, Bakasub will behave like your library is empty
+- if a file is outside `library/`, it will not show up in the app
+- if the library is empty, Bakasub will behave like your media collection is empty
 - if the folder permission is blocked, the backend cannot inspect or process the files
 
-Use an absolute path. Relative paths are not enough here.
+If you do not want to copy files, use symlinks from `library/` to your actual media directories.
 
 ## 🔄 Updating Bakasub
 
 When a new public release comes out:
 
 1. Pull or download the new tagged version of this repository.
-2. Keep your existing `.env` file.
+2. Keep your existing `library/` folder.
 3. Start the updated stack again:
 
 ```bash
-docker compose --env-file release.env --env-file .env up -d
+sh scripts/up.sh
 ```
 
 If you want to be explicit, you can pull first:
 
 ```bash
-docker compose --env-file release.env --env-file .env pull
-docker compose --env-file release.env --env-file .env up -d
+docker compose --env-file release.env pull
+sh scripts/up.sh
 ```
 
 ## 🛑 Stopping or Removing the Stack
@@ -164,13 +158,13 @@ docker compose --env-file release.env --env-file .env up -d
 Stop the containers without removing persistent data:
 
 ```bash
-docker compose --env-file release.env --env-file .env down
+docker compose --env-file release.env down
 ```
 
 Remove everything, including the PostgreSQL volume used by the app:
 
 ```bash
-docker compose --env-file release.env --env-file .env down -v
+docker compose --env-file release.env down -v
 ```
 
 Do the second one only if you really want to wipe the local app database.
@@ -179,13 +173,13 @@ Do the second one only if you really want to wipe the local app database.
 
 ### The frontend does not open
 
-- Check whether port `3000` is already in use.
-- If needed, change `FRONTEND_HOST_PORT` in `.env` and run the stack again.
+- Run `docker compose --env-file release.env port frontend 80` and open the printed URL.
+- If the container failed to start, inspect `docker compose --env-file release.env logs`.
 
 ### The backend port is busy
 
-- Change `BACKEND_HOST_PORT` in `.env`.
-- Restart with the same `docker compose --env-file release.env --env-file .env up -d` command.
+- The backend is no longer exposed directly on the host in the product stack.
+- Reach it through the frontend proxy using the URL printed by `sh scripts/up.sh`.
 
 ### Translation is locked
 
@@ -197,14 +191,14 @@ The product expects both to be configured before translation is enabled.
 
 ### I cannot see my video files
 
-- Confirm that `VIDEO_DIR` points to the correct absolute path.
-- Confirm that Docker can read that directory.
-- Confirm that the files really live inside that mounted folder.
+- Confirm that the files really exist inside `library/` or inside a symlink created from `library/`.
+- Confirm that Docker can read that folder.
+- Confirm that the **Library Root** saved in Settings points to the mounted location you expect.
 
 ### The stack fails to start
 
 - Make sure you are using a tagged or released version with real image digests in `release.env`.
-- Run `docker compose --env-file release.env --env-file .env logs` to inspect what failed.
+- Run `docker compose --env-file release.env logs` to inspect what failed.
 
 ## 💖 Support The Project
 
