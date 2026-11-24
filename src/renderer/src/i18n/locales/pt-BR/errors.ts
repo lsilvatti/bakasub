@@ -47,6 +47,12 @@ export const errors: LocaleShape<typeof en> = {
     'Escolha um idioma de destino primeiro: adicione um em Idiomas e defina como padrão.',
   TMDB_AUTH: 'O TMDB recusou a key. Confira em Configurações.',
   TMDB_KEY_MISSING: 'Adicione uma key do TMDB em Configurações para buscar títulos. É opcional.',
+  OPENSUBTITLES_AUTH:
+    'O OpenSubtitles recusou a API key ou a conta. Confira em Configurações (a conta usa o nome de usuário, não o e-mail).',
+  OPENSUBTITLES_KEY_MISSING:
+    'Adicione uma API key do OpenSubtitles em Configurações para buscar legendas.',
+  OPENSUBTITLES_QUOTA:
+    'O limite de downloads do OpenSubtitles de hoje foi atingido. Tente amanhã ou entre na sua conta em Configurações para um limite maior.',
   URL_NOT_ALLOWED: 'Este link não pode ser aberto pelo BakaSub.',
   UPDATE_UNSUPPORTED: 'Atualizações só são instaladas no AppImage ou no instalador do Windows.',
   UPDATE_NOT_READY: 'Nenhuma atualização está pronta para instalar.',

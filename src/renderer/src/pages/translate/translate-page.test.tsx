@@ -11,6 +11,7 @@ import type {
   MediaIdentification,
   PreflightEstimate,
   Preset,
+  SubtitleSearchRequest,
   SubtitleTrackInfo
 } from '@shared/ipc-contract'
 import { App } from '@renderer/app/app'
@@ -123,6 +124,8 @@ function setup(
   confirm: ReturnType<typeof vi.fn>
   setMemory: ReturnType<typeof vi.fn>
   retry: ReturnType<typeof vi.fn>
+  subtitleSearch: ReturnType<typeof vi.fn>
+  subtitleDownload: ReturnType<typeof vi.fn>
   update: (over: Partial<Job>) => void
 } {
   let current = job({})
@@ -146,6 +149,34 @@ function setup(
     current = { ...current, status: 'queued', progress: { step: 'preflight' } }
     return { ok: true as const, data: current }
   })
+  const subtitleSearch = vi.fn((req: SubtitleSearchRequest) =>
+    ok({
+      query: req.query ?? 'Show',
+      season: 1,
+      episode: 1,
+      results: [
+        {
+          fileId: 77,
+          release: 'Show.S01E01.WEB',
+          language: 'en',
+          downloads: 120,
+          hashMatch: true,
+          hearingImpaired: false,
+          machineTranslated: false,
+          trusted: false
+        }
+      ]
+    })
+  )
+  const subtitleDownload = vi.fn((fileId: number) =>
+    ok({
+      path: `/cache/opensubtitles/${fileId}.srt`,
+      name: `${fileId}.srt`,
+      format: 'srt' as const,
+      cached: false,
+      remaining: 4
+    })
+  )
   const fake = installFakeApi({
     jobs: {
       list: () => ok([]),
@@ -169,6 +200,7 @@ function setup(
     },
     settings: {
       apiKeyStatus: () => ok({ present: true, protection: 'os' as const }),
+      openSubtitlesStatus: () => ok({ keyPresent: true, username: null }),
       get: () => ok({ ...onboardedSettings, 'translation.targetLangs': ['pt-BR', 'es'] })
     },
     presets: {
@@ -195,6 +227,7 @@ function setup(
         })
     },
     dialog: { openFiles: () => ok({ paths: [path] }) },
+    subtitles: { search: subtitleSearch, download: subtitleDownload },
     media: {
       ...media,
       probe: () =>
@@ -235,6 +268,8 @@ function setup(
     confirm,
     setMemory,
     retry,
+    subtitleSearch,
+    subtitleDownload,
     update: (over) => {
       current = { ...current, ...over }
     }
@@ -538,5 +573,98 @@ describe('Translate a file', () => {
     expect(
       (screen.getByLabelText('Notes for the translator (optional)') as HTMLTextAreaElement).value
     ).toBe('Elf mage')
+  })
+})
+
+describe('a video with no subtitle to translate', () => {
+  const pgsOnly: SubtitleTrackInfo[] = [
+    {
+      id: 1,
+      codecId: 'S_HDMV/PGS',
+      format: null,
+      unsupported: 'image-based',
+      language: 'en',
+      default: true,
+      forced: false
+    }
+  ]
+  const toTrackStep = async (): Promise<void> => {
+    await openSingle()
+    await userEvent.click(await screen.findByRole('button', { name: 'Browse files' }))
+    await next()
+    await screen.findByText('This video has no subtitle track that can be translated.')
+  }
+
+  it('cannot continue until a subtitle is brought in; a file from disk is enough', async () => {
+    const { create } = setup('/videos/Show.S01E01.mkv', [])
+    await toTrackStep()
+    expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(
+      true
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Choose a subtitle file' }))
+    expect(await screen.findByText('Your file')).toBeTruthy()
+    await next()
+    await next()
+    await screen.findByRole('heading', { name: 'Where to save' })
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate cost' }))
+    expect(create).toHaveBeenCalledWith({
+      kind: 'pipeline',
+      source: '/videos/Show.S01E01.mkv',
+      subtitle: { path: '/videos/Show.S01E01.mkv' },
+      options: { outputMode: 'mux', setDefault: true, keepOriginalSubtitles: true },
+      confirmBeforeTranslate: true
+    })
+  })
+
+  it('image-only tracks: searches OpenSubtitles on its own, downloads the pick and can embed the original', async () => {
+    const { create, subtitleSearch, subtitleDownload } = setup('/videos/Show.S01E01.mkv', pgsOnly)
+    await toTrackStep()
+    await userEvent.click(screen.getByRole('button', { name: 'Search OpenSubtitles' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByText('Made for this file')).toBeTruthy()
+    expect(subtitleSearch).toHaveBeenCalledWith({
+      videoPath: '/videos/Show.S01E01.mkv',
+      languages: onboardedSettings['tracks.preferredSourceLangs']
+    })
+    expect((within(dialog).getByLabelText('Title') as HTMLInputElement).value).toBe('Show')
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Use Show.S01E01.WEB' }))
+    expect(subtitleDownload).toHaveBeenCalledWith(77)
+    expect((await screen.findAllByText(/Show\.S01E01\.WEB/)).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    await next()
+    await next()
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: 'Also add the original subtitle to the video' })
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate cost' }))
+    expect(create).toHaveBeenCalledWith({
+      kind: 'pipeline',
+      source: '/videos/Show.S01E01.mkv',
+      subtitle: { path: '/cache/opensubtitles/77.srt', language: 'en' },
+      options: {
+        outputMode: 'mux',
+        setDefault: true,
+        keepOriginalSubtitles: true,
+        includeSourceSubtitle: true
+      },
+      confirmBeforeTranslate: true
+    })
+  })
+
+  it('a video with tracks still offers another subtitle, and picking one drops the track', async () => {
+    setup('/videos/Show.S01E01.mkv')
+    await openSingle()
+    await userEvent.click(await screen.findByRole('button', { name: 'Browse files' }))
+    await next()
+    expect(await screen.findByText('Use another subtitle')).toBeTruthy()
+    const radio = (): HTMLElement => screen.getByRole('radio', { checked: true })
+    expect(radio()).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'Choose a subtitle file' }))
+    await screen.findByText('Your file')
+    expect(screen.queryByRole('radio', { checked: true })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Remove this subtitle' }))
+    expect(await screen.findByRole('radio', { checked: true })).toBeTruthy()
   })
 })

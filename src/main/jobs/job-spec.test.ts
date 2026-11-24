@@ -339,3 +339,80 @@ describe('resolveJobSpec', () => {
     ).rejects.toMatchObject({ code: 'INVALID_INPUT' })
   })
 })
+
+describe('resolveJobSpec: pipeline with an external subtitle', () => {
+  const base = { kind: 'pipeline' as const, presetId: 'p-test' }
+
+  it('freezes path, size and format; sourceLang from the file name; no trackId', async () => {
+    const s = await resolveJobSpec(
+      { ...base, source: join(dir, 'ep01.mkv'), subtitle: { path: join(dir, 'ep01.en.srt') } },
+      presets
+    )
+    expect(s).toMatchObject({
+      kind: 'pipeline',
+      source: join(dir, 'ep01.mkv'),
+      externalSubtitle: {
+        path: join(dir, 'ep01.en.srt'),
+        size: 3,
+        format: 'srt',
+        includeInMux: false
+      },
+      sourceLang: 'en'
+    })
+    expect(s).not.toHaveProperty('trackId')
+  })
+
+  it('the given language beats the file name; the request sourceLang beats both', async () => {
+    const source = join(dir, 'ep01.mkv')
+    const path = join(dir, 'ep01.en.srt')
+    expect(
+      await resolveJobSpec({ ...base, source, subtitle: { path, language: 'ja' } }, presets)
+    ).toMatchObject({ sourceLang: 'ja' })
+    expect(
+      await resolveJobSpec(
+        { ...base, source, sourceLang: 'ko', subtitle: { path, language: 'ja' } },
+        presets
+      )
+    ).toMatchObject({ sourceLang: 'ko' })
+  })
+
+  it('includeSourceSubtitle only applies when an MKV is written', async () => {
+    const req = {
+      ...base,
+      source: join(dir, 'ep01.mkv'),
+      subtitle: { path: join(dir, 'ep01.pt-BR.ass') }
+    }
+    expect(
+      await resolveJobSpec({ ...req, options: { includeSourceSubtitle: true } }, presets)
+    ).toMatchObject({ externalSubtitle: { format: 'ass', includeInMux: true } })
+    expect(
+      await resolveJobSpec(
+        { ...req, options: { includeSourceSubtitle: true, outputMode: 'subtitle' } },
+        presets
+      )
+    ).toMatchObject({ externalSubtitle: { includeInMux: false } })
+  })
+
+  it('requires exactly one of trackId and subtitle', async () => {
+    const source = join(dir, 'ep01.mkv')
+    await expect(resolveJobSpec({ ...base, source }, presets)).rejects.toMatchObject({
+      code: 'INVALID_INPUT'
+    })
+    await expect(
+      resolveJobSpec(
+        { ...base, source, trackId: 2, subtitle: { path: join(dir, 'ep01.en.srt') } },
+        presets
+      )
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+  })
+
+  it('the external subtitle goes through the same path guard (extension, existence)', async () => {
+    const source = join(dir, 'ep01.mkv')
+    await expect(
+      resolveJobSpec({ ...base, source, subtitle: { path: source } }, presets)
+    ).rejects.toMatchObject({ code: 'INVALID_PATH', message: 'extension' })
+    await expect(
+      resolveJobSpec({ ...base, source, subtitle: { path: join(dir, 'nope.srt') } }, presets)
+    ).rejects.toMatchObject({ code: 'INVALID_PATH', message: 'not-found' })
+  })
+})

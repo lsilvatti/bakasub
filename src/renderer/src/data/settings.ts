@@ -5,7 +5,12 @@ import {
   type UseMutationResult,
   type UseQueryResult
 } from '@tanstack/react-query'
-import type { ApiKeyStatus, PublicSettings, TmdbKeyStatus } from '@shared/ipc-contract'
+import type {
+  ApiKeyStatus,
+  OpenSubtitlesStatus,
+  PublicSettings,
+  TmdbKeyStatus
+} from '@shared/ipc-contract'
 import { isOnboarded as onboardingRule } from '@shared/onboarding'
 import { unwrap } from '@renderer/lib/ipc'
 import { qk } from './query-keys'
@@ -99,5 +104,48 @@ export function useSetTmdbKey(): UseMutationResult<TmdbKeyStatus, Error, string 
       // Identification said `no-key` before: ask again.
       void qc.invalidateQueries({ queryKey: ['media'] })
     }
+  })
+}
+
+export const useOpenSubtitlesStatus = (): UseQueryResult<OpenSubtitlesStatus> =>
+  useQuery({
+    queryKey: qk.settings.openSubtitles(),
+    queryFn: () => unwrap(window.api.settings.openSubtitlesStatus())
+  })
+
+export function useSetOpenSubtitlesKey(): UseMutationResult<
+  OpenSubtitlesStatus,
+  Error,
+  string | null
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (key) =>
+      unwrap(
+        key === null
+          ? window.api.settings.clearOpenSubtitlesKey()
+          : window.api.settings.setOpenSubtitlesKey(key)
+      ),
+    onSuccess: (s) => {
+      qc.setQueryData(qk.settings.openSubtitles(), s)
+      void qc.invalidateQueries({ queryKey: ['subtitles'] })
+    }
+  })
+}
+
+export function useOpenSubtitlesLogin(): UseMutationResult<
+  OpenSubtitlesStatus,
+  Error,
+  { username: string; password: string } | null
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (login) =>
+      unwrap(
+        login === null
+          ? window.api.settings.openSubtitlesLogout()
+          : window.api.settings.openSubtitlesLogin(login.username, login.password)
+      ),
+    onSuccess: (s) => qc.setQueryData(qk.settings.openSubtitles(), s)
   })
 }

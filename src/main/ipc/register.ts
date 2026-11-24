@@ -23,6 +23,7 @@ import { registerMemoryHandlers } from './handlers/memory.handler'
 import { registerPresetHandlers } from './handlers/presets.handler'
 import { registerSettingsHandlers } from './handlers/settings.handler'
 import { registerSidecarHandlers } from './handlers/sidecar.handler'
+import { registerSubtitleHandlers } from './handlers/subtitles.handler'
 
 export interface IpcDependencies {
   appInfo: AppInfoService
@@ -41,6 +42,7 @@ export interface IpcDependencies {
   mediaContext: MediaContextService
   freeQuota: FreeQuota
   validateApiKey: (key: string) => Promise<unknown>
+  subtitleSources: Parameters<typeof registerSubtitleHandlers>[0]['subtitleSources']
 }
 
 /** Composition root dos handlers IPC. Um arquivo por domínio em ./handlers. */
@@ -56,4 +58,5 @@ export function registerIpc(deps: IpcDependencies): void {
   registerBatchHandlers(deps)
   registerLogHandlers()
   registerMediaContextHandlers(deps)
+  registerSubtitleHandlers(deps)
 }

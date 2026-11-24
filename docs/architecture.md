@@ -34,6 +34,7 @@ src/
     llm/           OpenRouter client (SSE), model catalog, chunking, prompts, retries, translateDocument
     memory/        Job Memory: context hash and cache service
     media-context/ TMDB media context: release-name parser, client, cache, artwork protocol
+    subtitle-sources/ OpenSubtitles: client, session, movie hash, search and cached download
     media/         mkvtoolnix facade (probe/extract/mux), languages, output naming, path guard
     jobs/          job queue, runner, steps (probe/extract/translate/validate/write/mux), job specs
     batch/         batch planning (scan, probe, track selection) and batch service
@@ -59,6 +60,7 @@ docs/              detailed system flows
 - **Cost and cache**: [`preflight.md`](./preflight.md) and [`job-memory.md`](./job-memory.md).
 - **Jobs and batches**: queue, runner, steps, cancellation. See [`jobs.md`](./jobs.md).
 - **Media context (TMDB)**: [`media-context.md`](./media-context.md).
+- **External subtitles** (file from disk or OpenSubtitles, for videos with no usable track): [`subtitle-sources.md`](./subtitle-sources.md).
 - **Sidecars**: remote manifest, verified download, pruning. See [`sidecars.md`](./sidecars.md).
 - **Database**: SQLite in WAL mode (`synchronous=NORMAL`, `foreign_keys=ON`, `busy_timeout=5000`), Drizzle migrations applied on boot (`drizzle/` ships in `resources/`). See [`database.md`](./database.md).
 - **Native notifications**: emitted by the Main, only in the background, per-category settings. See [`notifications.md`](./notifications.md).
@@ -73,6 +75,7 @@ bakasub.db            SQLite (WAL)
 logs/main.log         JSON lines, rotates at 5 MB (5 files kept)
 cache/manifests/      last valid remote manifest (offline fallback)
 cache/artwork/        TMDB artwork (LRU, 200 MB)
+cache/opensubtitles/  subtitles downloaded from OpenSubtitles (<fileId>.srt)
 cache/jobs/<id>/      per-job work directory
 bin/                  sidecars (+ installed.json)
 ```
@@ -125,6 +128,7 @@ const { path, env } = await sidecars.resolve('mkvmerge')
 - [x] **Job Memory**: validated cache keyed by context hash + language + model + glossary
 - [x] **Preflight**: local token estimate × cache hit rate × live OpenRouter pricing, coverage report, confirmation before translating
 - [x] **Media context** (TMDB): release-name parsing, conservative auto-match, local artwork cache
+- [x] **External subtitles** for videos with no usable track: a file from disk or an OpenSubtitles search (movie hash + title), single-file wizard only
 - [x] **Rate limits and retries**: per-lane limiter, 429 cooldown, free-model daily quota
 - [x] **Frontend**: onboarding, Translate wizard, queue, Extract, Mux, Presets, Models, Languages, Logs, Settings; English and Brazilian Portuguese
 - [x] **Parser diagnostics and encoding confidence** for subtitle files in the Translate wizard preflight

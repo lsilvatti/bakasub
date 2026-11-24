@@ -8,8 +8,10 @@ import type {
   MediaContextLookup,
   MediaType,
   OutputMode,
-  Preset
+  Preset,
+  SubtitleTextFormat
 } from '../../shared/ipc-contract'
+import { formatFromPath } from './steps/subtitle-io'
 import { AppError } from '../errors'
 import { languageName } from '../llm/prompt-builder'
 import { MAX_USER_NOTES } from '../presets/preset.schema'
@@ -106,6 +108,13 @@ export interface MuxSubtitleSpec {
   readonly default: boolean
 }
 
+export interface ExternalSubtitleSpec {
+  readonly path: string
+  readonly size: number
+  readonly format: SubtitleTextFormat
+  readonly includeInMux: boolean
+}
+
 export type JobSpec =
   | (Base &
       WriteSpecOptions & {
@@ -136,7 +145,8 @@ export type JobSpec =
       MuxSpecOptions &
       WriteSpecOptions & {
         readonly kind: 'pipeline'
-        readonly trackId: number
+        readonly trackId?: number
+        readonly externalSubtitle?: ExternalSubtitleSpec
         readonly preset: PresetSnapshot
         readonly targetLang: string
         readonly sourceLang?: string
@@ -221,7 +231,8 @@ export const JobCreateRequestSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('pipeline'),
     source: path,
-    trackId,
+    trackId: trackId.optional(),
+    subtitle: z.object({ path, language: lang.optional() }).optional(),
     presetId: z.string().min(1).max(64).optional(),
     model: z.string().trim().min(1).max(200).optional(),
     notes: z.string().max(MAX_USER_NOTES).optional(),
@@ -235,6 +246,7 @@ export const JobCreateRequestSchema = z.discriminatedUnion('kind', [
         keepOriginalSubtitles: z.boolean().optional(),
         outputMode: z.enum(['mux', 'subtitle', 'both']).optional(),
         alsoWriteSubtitle: z.boolean().optional(),
+        includeSourceSubtitle: z.boolean().optional(),
         overwrite: z.boolean().optional()
       })
       .optional(),
@@ -351,16 +363,19 @@ export async function resolveJobSpec(
       }
     }
     case 'pipeline': {
+      if ((req.trackId === undefined) === (req.subtitle === undefined))
+        throw new AppError('INVALID_INPUT', 'Exactly one of trackId and subtitle is required')
+      const origin = await pipelineOrigin(req)
       const { preset, targetLang } = await resolvePreset(req, presets)
       return {
         ...base,
         kind: 'pipeline',
-        trackId: req.trackId,
+        ...origin.spec,
         preset,
         targetLang,
         ...withNotes(req.notes),
         ...(await resolveMedia(req.media, media)),
-        ...withLang(optionalLang(req.sourceLang)),
+        ...withLang(optionalLang(req.sourceLang) ?? origin.sourceLang),
         setDefault: req.options?.setDefault ?? true,
         keepOriginalSubtitles: req.options?.keepOriginalSubtitles ?? true,
         // `alsoWriteSubtitle` (legado) só vale sem `outputMode`: `true` = `both`.
@@ -370,6 +385,28 @@ export async function resolveJobSpec(
         memory: req.memory ?? 'use'
       }
     }
+  }
+}
+
+async function pipelineOrigin(
+  req: Extract<z.infer<typeof JobCreateRequestSchema>, { kind: 'pipeline' }>
+): Promise<{
+  spec: { trackId: number } | { externalSubtitle: ExternalSubtitleSpec }
+  sourceLang?: string
+}> {
+  if (!req.subtitle) return { spec: { trackId: req.trackId! } }
+  const f = await validateInputFile(req.subtitle.path, SUBTITLE_EXTENSIONS, MAX_SUBTITLE_BYTES)
+  const mode = req.options?.outputMode ?? (req.options?.alsoWriteSubtitle ? 'both' : 'mux')
+  return {
+    spec: {
+      externalSubtitle: {
+        path: f.path,
+        size: f.size,
+        format: formatFromPath(f.path),
+        includeInMux: mode !== 'subtitle' && (req.options?.includeSourceSubtitle ?? false)
+      }
+    },
+    sourceLang: optionalLang(req.subtitle.language) ?? langFromFilename(f.path)
   }
 }
 

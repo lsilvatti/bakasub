@@ -7,7 +7,7 @@ export const probeStep: Step = async (ctx) => {
   const wanted =
     ctx.spec.kind === 'extract'
       ? ctx.spec.trackIds
-      : ctx.spec.kind === 'pipeline'
+      : ctx.spec.kind === 'pipeline' && ctx.spec.trackId !== undefined
         ? [ctx.spec.trackId]
         : []
   for (const id of wanted) {

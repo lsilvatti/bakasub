@@ -10,7 +10,11 @@ const EXTRACT_FREE_BYTES = 100 * 1024 * 1024
 export const extractStep: Step = async (ctx) => {
   const { spec } = ctx
   const ids =
-    spec.kind === 'extract' ? spec.trackIds : spec.kind === 'pipeline' ? [spec.trackId] : []
+    spec.kind === 'extract'
+      ? spec.trackIds
+      : spec.kind === 'pipeline' && spec.trackId !== undefined
+        ? [spec.trackId]
+        : []
   const tracks = ids.map((id) => {
     const t = ctx.artifacts.probe?.tracks.find((x) => x.id === id)
     if (!t?.format) throw new AppError('INVALID_INPUT', `Track ${id} is not available`)

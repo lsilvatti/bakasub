@@ -32,13 +32,23 @@ Drop a file or pick one. A subtitle file (`.srt`, `.ass`, `.ssa`, `.vtt`) is tra
 
 Steps:
 
-1. **File**, and for a video the **track**. Image-based tracks (PGS, VobSub, DVB) and unsupported formats are listed but disabled, with the reason. A track is preselected from your preferred source languages (Settings → General).
+1. **File**, and for a video the **track**. Image-based tracks (PGS, VobSub, DVB) and unsupported formats are listed but disabled, with the reason. A track is preselected from your preferred source languages (Settings → General). If the video has **no subtitle that can be translated**, bring one in right there: choose a subtitle file you already have, or **search OpenSubtitles** (see below). The same two options are available, as "Use another subtitle", when the video does have tracks.
 2. **Preset and context**. The preset can be suggested from the movie/series the app identifies from the file name (TMDB). Pick the model and target language (defaults are prefilled) and optionally write **notes** for the AI: synopsis, characters, tone (up to 4,000 characters).
-3. **Output**. The folder (default: next to the source) and, for a video, what to write: the MKV with the new subtitle, the subtitle file only (for players that load external subtitles by name), or both. For an MKV you can set the new track as default and keep or drop the original subtitles. A preview shows the final file names; by default existing files are kept and a ` (2)` suffix is added, unless you choose to replace them.
+3. **Output**. The folder (default: next to the source) and, for a video, what to write: the MKV with the new subtitle, the subtitle file only (for players that load external subtitles by name), or both. For an MKV you can set the new track as default and keep or drop the original subtitles; when the source was a subtitle from outside the video, you can also add that original subtitle to the MKV. A preview shows the final file names; by default existing files are kept and a ` (2)` suffix is added, unless you choose to replace them.
 4. **Review cost** (see below), then confirm.
 5. **Progress and result**: live progress, cost so far, and at the end the output files, final cost, warnings and any untranslated lines.
 
 Your wizard state survives switching pages. Closing the app does not lose jobs: they are saved, and ones that were running are marked **interrupted** so you can retry them.
+
+#### Searching OpenSubtitles
+
+The search needs your own free OpenSubtitles API key (Settings → Keys; the in-app guide shows how to get one, and the search dialog asks for it the first time). It starts on its own from the file: a fingerprint of the video plus the title, season and episode read from the file name. You can change the title, numbers and languages and search again.
+
+- **Made for this file** marks subtitles made for this exact video file: their timing matches. Other results match by title and may be out of sync; BakaSub does not adjust timing.
+- **Machine translated** results are a poor source to translate from.
+- Downloads are limited per day by OpenSubtitles (searching is not). Signing in to your OpenSubtitles account in Settings → Keys raises the limit. A subtitle already downloaded is kept and costs nothing to pick again.
+
+Several files or a folder (below) do not search OpenSubtitles: videos without a usable subtitle are skipped there.
 
 ### Several files or a folder
 
@@ -82,7 +92,7 @@ A preset in use by a queued or running job cannot be deleted.
 ## Settings
 
 - **General**: app language (system, English, Português do Brasil), default preset, jobs at the same time, auto-confirm threshold, preferred source languages, detailed logs, system notifications. Notifications appear only while BakaSub is in the background (never while its window is in front): a file finished, failed or waits for cost confirmation; a batch finished or waits for confirmation (one notification per batch); a new version is available. Each category can be turned off, or all of them at once. Clicking a notification brings the window back on that job, batch or the About panel.
-- **Keys**: OpenRouter and TMDB.
+- **Keys**: OpenRouter, TMDB and OpenSubtitles (API key, plus an optional account sign-in for a bigger daily download limit).
 - **Translation cache**: size on disk, number of lines, last used date. You can prune entries not used for a number of days or clear everything. This is disabled while a job is running.
 - **Video tools**: install or re-check ffmpeg and mkvtoolnix.
 - **Advanced**: parallelism and rate-limit tuning, with the recommended range shown; values outside it warn but do not block. "Restore defaults" resets only these.
@@ -97,6 +107,7 @@ Translated lines are saved locally, so reprocessing a file (or another file with
 
 - **OpenRouter** receives the subtitle text to translate (with neighboring lines as context), your notes, the preset instructions and glossary, and TMDB synopsis if you chose to include it. Timestamps and formatting tags are not sent. The provider's own policy applies; some models are moderated and may refuse certain lines (they stay untranslated and are reported).
 - **TMDB** (only if you add a key) receives the title parsed from the file name.
+- **OpenSubtitles** (only if you add a key, and only when you open its search) receives the title, season and episode parsed from the file name, a fingerprint of the video file (its size and a checksum of its first and last 64 KiB), and, if you signed in, your account credentials. The video itself is never uploaded.
 - **GitHub** is contacted to read the sidecar manifest and to check for app updates. The tools themselves are downloaded from their publishers' sites listed in the manifest (mkvtoolnix.download, ffmpeg.martin-riedl.de, gyan.dev), and verified against the SHA-256 in the manifest.
 - There is no telemetry. Logs stay on your machine; the exported log file hides your API key and replaces your home folder with `~`.
 

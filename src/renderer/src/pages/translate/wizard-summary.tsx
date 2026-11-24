@@ -43,14 +43,16 @@ export function WizardSummary({
     {
       step: 'track',
       label: t('translate.summary.track'),
-      value: track
-        ? [
-            track.language ? lang(track.language) : t('translate.track.unknownLang'),
-            track.format?.toUpperCase()
-          ]
-            .filter(Boolean)
-            .join(' · ')
-        : null
+      value: state.subtitle
+        ? `${state.subtitle.name} · ${t(`translate.external.origin.${state.subtitle.origin}`)}`
+        : track
+          ? [
+              track.language ? lang(track.language) : t('translate.track.unknownLang'),
+              track.format?.toUpperCase()
+            ]
+              .filter(Boolean)
+              .join(' · ')
+          : null
     },
     {
       step: 'preset',

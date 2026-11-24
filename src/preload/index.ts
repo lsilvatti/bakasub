@@ -52,6 +52,12 @@ const api: BakaSubApi = {
     setTmdbKey: (key) => invoke('settings:set-tmdb-key', { key }),
     clearTmdbKey: () => invoke('settings:clear-tmdb-key'),
     tmdbKeyStatus: () => invoke('settings:tmdb-key-status'),
+    setOpenSubtitlesKey: (key) => invoke('settings:set-opensubtitles-key', { key }),
+    clearOpenSubtitlesKey: () => invoke('settings:clear-opensubtitles-key'),
+    openSubtitlesStatus: () => invoke('settings:opensubtitles-status'),
+    openSubtitlesLogin: (username, password) =>
+      invoke('settings:opensubtitles-login', { username, password }),
+    openSubtitlesLogout: () => invoke('settings:opensubtitles-logout'),
     get: () => invoke('settings:get'),
     update: (patch) => invoke('settings:update', patch),
     reset: (keys) => invoke('settings:reset', { keys })
@@ -110,6 +116,10 @@ const api: BakaSubApi = {
     setMemory: (id, memory) => invoke('jobs:set-memory', { id, memory }),
     dismissConsistency: (id) => invoke('jobs:dismiss-consistency', { id }),
     preflight: (id) => invoke('jobs:preflight', { id })
+  },
+  subtitles: {
+    search: (request) => invoke('subtitles:search', request),
+    download: (fileId) => invoke('subtitles:download', { fileId })
   },
   files: {
     inspect: (path) => invoke('files:inspect', { path }),

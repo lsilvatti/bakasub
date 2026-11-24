@@ -14,6 +14,7 @@ const files = import.meta.glob<string>('./*/*.md', {
 export const GUIDE_IDS = [
   'choosing-models',
   'openrouter-key',
+  'opensubtitles-key',
   'openrouter-limits',
   'tmdb-key'
 ] as const

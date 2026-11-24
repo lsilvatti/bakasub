@@ -18,6 +18,7 @@ Windows x64 e Linux x64 · [GPL-3.0](./LICENSE) · [Site](https://bakasub.silvat
 - **Cuida de todo o fluxo do MKV**: extrai uma faixa de legenda, traduz e remuxa no vídeo (ou só salva o arquivo de legenda). Use cada etapa separada ou rode tudo de uma vez.
 - **Mostra o custo antes de você pagar**: contagem de tokens e estimativa de preço com os preços atuais do OpenRouter, mais a lista do que _não_ será traduzido.
 - **Lembra o que já traduziu**: um cache local deixa o reprocessamento de um arquivo quase de graça.
+- **Funciona quando o vídeo não tem legenda**: use um arquivo de legenda seu ou busque no [OpenSubtitles](https://www.opensubtitles.com/) pelo app, e traduza como qualquer outra.
 - **Sabe o que você está assistindo**: lê o nome do release e pode buscar sinopse e dados do episódio no TMDB para melhorar a tradução.
 - **Mantém seus termos consistentes** com presets (Filme, Série, Anime, Documentário ou os seus) e um glossário para nomes, honoríficos e jargões.
 - **Trabalha em lote**: traduza, extraia ou remuxe uma pasta ou temporada inteira de uma vez.
@@ -47,7 +48,7 @@ Progresso, custo e resultados ficam na **Fila**. O passo a passo completo está 
 
 ## Bom saber
 
-- **Custo e privacidade.** Você paga o OpenRouter diretamente pelo que traduz. O texto das legendas, suas notas e o glossário são enviados ao OpenRouter; o nome do arquivo vai ao TMDB se você adicionar uma chave. Nada é enviado sem você iniciar um job, e nada vai para o autor. Detalhes no [guia do usuário](./docs/user-guide.md#privacy-what-leaves-your-computer).
+- **Custo e privacidade.** Você paga o OpenRouter diretamente pelo que traduz. O texto das legendas, suas notas e o glossário são enviados ao OpenRouter; o nome do arquivo vai ao TMDB se você adicionar uma chave, e ao OpenSubtitles (com uma impressão digital do arquivo de vídeo) se você adicionar a chave dele e buscar por lá. Nada é enviado sem uma ação sua, e nada vai para o autor. Detalhes no [guia do usuário](./docs/user-guide.md#privacy-what-leaves-your-computer).
 - **Seus dados** ficam na pasta de dados do usuário. Atualizar ou desinstalar o app não os apaga. Builds de desenvolvimento (`npm run dev`) usam uma pasta separada e nunca tocam nos dados do app instalado:
 
   |         | Instalado           | Desenvolvimento         |
@@ -66,7 +67,7 @@ A documentação detalhada está em inglês.
 
 - **Usando o app**: [Guia do usuário](./docs/user-guide.md) · [Reportar um problema](./docs/reporting-issues.md)
 - **Contribuindo**: [CONTRIBUTING.md](./CONTRIBUTING.md) · [Desenvolvimento](./docs/development.md) · [Arquitetura](./docs/architecture.md)
-- **Internos**: [IPC](./docs/ipc.md) · [Sidecars](./docs/sidecars.md) · [Banco de dados](./docs/database.md) · [Parsing de legendas](./docs/parsing.md) · [Job Memory](./docs/job-memory.md) · [Tradução LLM](./docs/llm.md) · [Jobs](./docs/jobs.md) · [Preflight](./docs/preflight.md) · [Limites e retries](./docs/rate-limits.md) · [Presets](./docs/presets.md) · [Contexto de mídia](./docs/media-context.md) · [Logging](./docs/logging.md) · [Renderer](./docs/renderer.md) · [Tokens de marca](./docs/brand-tokens.md) · [Site](./docs/site.md) · [Build e release](./docs/release.md)
+- **Internos**: [IPC](./docs/ipc.md) · [Sidecars](./docs/sidecars.md) · [Banco de dados](./docs/database.md) · [Parsing de legendas](./docs/parsing.md) · [Job Memory](./docs/job-memory.md) · [Tradução LLM](./docs/llm.md) · [Jobs](./docs/jobs.md) · [Preflight](./docs/preflight.md) · [Limites e retries](./docs/rate-limits.md) · [Presets](./docs/presets.md) · [Contexto de mídia](./docs/media-context.md) · [Legendas externas](./docs/subtitle-sources.md) · [Logging](./docs/logging.md) · [Renderer](./docs/renderer.md) · [Tokens de marca](./docs/brand-tokens.md) · [Site](./docs/site.md) · [Build e release](./docs/release.md)
 
 ## Suporte e contribuição
 

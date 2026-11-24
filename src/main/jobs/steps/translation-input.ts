@@ -39,6 +39,9 @@ export async function translationInput(ctx: StepContext): Promise<TranslationInp
   if (spec.kind === 'translate') {
     path = spec.source
     formatId = formatFromPath(spec.source)
+  } else if (spec.externalSubtitle) {
+    path = spec.externalSubtitle.path
+    formatId = spec.externalSubtitle.format
   } else {
     const f = ctx.artifacts.extract?.files.find((x) => x.trackId === spec.trackId)
     if (!f) throw new AppError('INVALID_INPUT', 'Extracted track is missing')

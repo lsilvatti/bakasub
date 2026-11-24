@@ -308,6 +308,48 @@ export interface TmdbKeyStatus {
   present: boolean
 }
 
+export interface OpenSubtitlesStatus {
+  keyPresent: boolean
+  username: string | null
+}
+
+export interface SubtitleSearchRequest {
+  videoPath: string
+  query?: string
+  languages: string[]
+  season?: number
+  episode?: number
+}
+
+export interface SubtitleSearchResult {
+  fileId: number
+  release: string
+  language: string
+  downloads: number
+  hashMatch: boolean
+  hearingImpaired: boolean
+  machineTranslated: boolean
+  trusted: boolean
+  fps?: number
+  uploader?: string
+}
+
+export interface SubtitleSearchResponse {
+  query: string
+  season?: number
+  episode?: number
+  results: SubtitleSearchResult[]
+}
+
+export interface SubtitleDownload {
+  path: string
+  name: string
+  format: SubtitleTextFormat
+  cached: boolean
+  remaining?: number
+  resetAt?: string
+}
+
 export interface ApiKeyStatus {
   present: boolean
   /** `os`: protegida pelo cofre do sistema; `none`: sem keyring disponível (a UI deve avisar). */
@@ -444,7 +486,9 @@ export type JobCreateRequest =
   | {
       kind: 'pipeline'
       source: string
-      trackId: number
+      /** Exactly one of `trackId` and `subtitle` (a subtitle from outside the video). */
+      trackId?: number
+      subtitle?: { path: string; language?: string }
       /** Padrão: `translation.defaultPresetId`. */
       presetId?: string
       /** Id OpenRouter. Padrão: `translation.defaultModel`. */
@@ -466,6 +510,7 @@ export type JobCreateRequest =
           outputMode?: OutputMode
           /** @deprecated Use `outputMode`: `true` = `both`. Ignorado se `outputMode` vier. */
           alsoWriteSubtitle?: boolean
+          includeSourceSubtitle?: boolean
         }
       /** Para em `awaiting-confirmation` com a estimativa de custo. Padrão `true`. */
       confirmBeforeTranslate?: boolean
@@ -1043,6 +1088,16 @@ export interface IpcInvokeContract {
   'settings:set-tmdb-key': { req: { key: string }; res: TmdbKeyStatus }
   'settings:clear-tmdb-key': { req: void; res: TmdbKeyStatus }
   'settings:tmdb-key-status': { req: void; res: TmdbKeyStatus }
+  'settings:set-opensubtitles-key': { req: { key: string }; res: OpenSubtitlesStatus }
+  'settings:clear-opensubtitles-key': { req: void; res: OpenSubtitlesStatus }
+  'settings:opensubtitles-status': { req: void; res: OpenSubtitlesStatus }
+  'settings:opensubtitles-login': {
+    req: { username: string; password: string }
+    res: OpenSubtitlesStatus
+  }
+  'settings:opensubtitles-logout': { req: void; res: OpenSubtitlesStatus }
+  'subtitles:search': { req: SubtitleSearchRequest; res: SubtitleSearchResponse }
+  'subtitles:download': { req: { fileId: number }; res: SubtitleDownload }
   /** Só o nome do arquivo é usado (nada é lido do disco). */
   'media:identify': { req: { name: string }; res: MediaIdentification }
   'media:search': { req: { query: string }; res: MediaSearchResult[] }
@@ -1180,6 +1235,13 @@ export const INVOKE_CHANNELS = [
   'settings:set-tmdb-key',
   'settings:clear-tmdb-key',
   'settings:tmdb-key-status',
+  'settings:set-opensubtitles-key',
+  'settings:clear-opensubtitles-key',
+  'settings:opensubtitles-status',
+  'settings:opensubtitles-login',
+  'settings:opensubtitles-logout',
+  'subtitles:search',
+  'subtitles:download',
   'media:identify',
   'media:search',
   'media:lookup',
@@ -1262,6 +1324,11 @@ export interface BakaSubApi {
     setTmdbKey(key: string): Promise<IpcResult<TmdbKeyStatus>>
     clearTmdbKey(): Promise<IpcResult<TmdbKeyStatus>>
     tmdbKeyStatus(): Promise<IpcResult<TmdbKeyStatus>>
+    setOpenSubtitlesKey(key: string): Promise<IpcResult<OpenSubtitlesStatus>>
+    clearOpenSubtitlesKey(): Promise<IpcResult<OpenSubtitlesStatus>>
+    openSubtitlesStatus(): Promise<IpcResult<OpenSubtitlesStatus>>
+    openSubtitlesLogin(username: string, password: string): Promise<IpcResult<OpenSubtitlesStatus>>
+    openSubtitlesLogout(): Promise<IpcResult<OpenSubtitlesStatus>>
     get(): Promise<IpcResult<PublicSettings>>
     update(patch: Partial<PublicSettings>): Promise<IpcResult<PublicSettings>>
     reset(keys: (keyof PublicSettings)[]): Promise<IpcResult<PublicSettings>>
@@ -1325,6 +1392,10 @@ export interface BakaSubApi {
     preflight(
       id: string
     ): Promise<IpcResult<{ estimate: PreflightEstimate; coverage: CoverageReport } | null>>
+  }
+  subtitles: {
+    search(request: SubtitleSearchRequest): Promise<IpcResult<SubtitleSearchResponse>>
+    download(fileId: number): Promise<IpcResult<SubtitleDownload>>
   }
   files: {
     inspect(path: string): Promise<IpcResult<SubtitleInspection>>

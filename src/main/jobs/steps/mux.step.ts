@@ -27,6 +27,17 @@ export const muxStep: Step = async (ctx) => {
       }
     ]
     subtitleBytes = t.file.size
+    const ext = spec.externalSubtitle
+    if (ext?.includeInMux) {
+      const srcLang = spec.sourceLang ?? 'und'
+      subtitles.push({
+        path: ext.path,
+        language: srcLang,
+        name: srcLang === 'und' ? 'Original' : languageName(srcLang),
+        default: false
+      })
+      subtitleBytes += ext.size
+    }
   } else if (spec.kind === 'mux') {
     lang = spec.subtitles[0].language
     subtitles = spec.subtitles.map((s) => ({

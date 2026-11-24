@@ -3,10 +3,13 @@ import { GuideDialog } from '@renderer/components/common/guide-dialog'
 import { KeyForm } from '@renderer/components/forms/key-form'
 import {
   useApiKeyStatus,
+  useOpenSubtitlesStatus,
   useSetApiKey,
+  useSetOpenSubtitlesKey,
   useSetTmdbKey,
   useTmdbKeyStatus
 } from '@renderer/data/settings'
+import { OpenSubtitlesAccount } from './opensubtitles-account'
 
 /** The OpenRouter key cannot be removed here: the app needs it (onboarding would open again). */
 export function KeysSection(): React.JSX.Element {
@@ -15,6 +18,8 @@ export function KeysSection(): React.JSX.Element {
   const setOr = useSetApiKey()
   const tmdb = useTmdbKeyStatus()
   const setTmdb = useSetTmdbKey()
+  const os = useOpenSubtitlesStatus()
+  const setOs = useSetOpenSubtitlesKey()
   return (
     <div className="grid gap-6">
       <section className="grid gap-2">
@@ -47,6 +52,22 @@ export function KeysSection(): React.JSX.Element {
           onSave={(key) => setTmdb.mutateAsync(key)}
           onRemove={() => setTmdb.mutate(null)}
         />
+      </section>
+      <section className="grid gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold">{t('settings.keys.opensubtitles')}</h3>
+          <GuideDialog id="opensubtitles-key" />
+        </div>
+        <p className="text-xs text-muted-foreground">{t('settings.keys.opensubtitlesHint')}</p>
+        <KeyForm
+          label={t('settings.keys.opensubtitlesLabel')}
+          present={!!os.data?.keyPresent}
+          saving={setOs.isPending}
+          error={setOs.error}
+          onSave={(key) => setOs.mutateAsync(key)}
+          onRemove={() => setOs.mutate(null)}
+        />
+        {os.data?.keyPresent ? <OpenSubtitlesAccount username={os.data.username} /> : null}
       </section>
     </div>
   )

@@ -13,7 +13,8 @@ export const qk = {
   settings: {
     all: () => ['settings', 'values'] as const,
     apiKey: () => ['settings', 'api-key'] as const,
-    tmdbKey: () => ['settings', 'tmdb-key'] as const
+    tmdbKey: () => ['settings', 'tmdb-key'] as const,
+    openSubtitles: () => ['settings', 'opensubtitles'] as const
   },
   models: {
     all: ['models'] as const,
@@ -29,6 +30,9 @@ export const qk = {
     search: (q: string) => ['media', 'search', q.trim().toLowerCase()] as const,
     lookup: (kind: string, id: number, season: number, episode: number) =>
       ['media', 'lookup', kind, id, season, episode] as const
+  },
+  subtitles: {
+    search: (request: unknown) => ['subtitles', 'search', request] as const
   },
   memory: {
     stats: () => ['memory', 'stats'] as const

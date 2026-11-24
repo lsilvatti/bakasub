@@ -63,6 +63,7 @@ export const common = {
     'openrouter-key': 'How to get an OpenRouter key',
     'openrouter-limits': 'Limits, waits and retries',
     'tmdb-key': 'How to get a TMDB key',
+    'opensubtitles-key': 'How to get an OpenSubtitles API key',
     'choosing-models': 'How to choose a model',
     openExternal: 'Opens in your browser'
   },
@@ -245,6 +246,16 @@ export const common = {
         'The video has {{count}} fonts attached; they are kept for styled (.ass) subtitles.',
       unknownLang: 'Unknown language'
     },
+    external: {
+      other: 'Use another subtitle',
+      body: 'Translate a subtitle from outside the video instead of one of its tracks.',
+      bodyNone:
+        'Choose a subtitle file you already have, or search OpenSubtitles for one that matches this video.',
+      file: 'Choose a subtitle file',
+      search: 'Search OpenSubtitles',
+      remove: 'Remove this subtitle',
+      origin: { file: 'Your file', opensubtitles: 'OpenSubtitles' }
+    },
     preset: {
       heading: 'How to translate',
       suggested: {
@@ -280,6 +291,7 @@ export const common = {
       reset: 'Use the source folder',
       setDefault: 'Make the translated subtitle the default track',
       keepOriginal: 'Keep the original subtitles in the video',
+      includeOriginal: 'Also add the original subtitle to the video',
       mode: {
         label: 'What to save',
         mux: 'MKV with the subtitle embedded',
@@ -793,6 +805,37 @@ export const common = {
       UNTRANSLATED_CONTENT_FILTERED: "Blocked by the provider's moderation"
     }
   },
+  opensubtitles: {
+    title: 'Search OpenSubtitles',
+    description: 'Subtitles for this video, to use as the source of the translation.',
+    needsKey:
+      'OpenSubtitles needs your own API key. It is free; add it once and it stays saved in Settings.',
+    query: 'Title',
+    season: 'Season',
+    episode: 'Episode',
+    languages: 'Subtitle languages',
+    anyLanguage: 'Any language',
+    search: 'Search',
+    searching: 'Searching…',
+    noResults: 'No subtitles found. Try another title or another language.',
+    downloads_one: '{{count}} download',
+    downloads_other: '{{count}} downloads',
+    badge: {
+      hashMatch: 'Made for this file',
+      trusted: 'Trusted uploader',
+      hearingImpaired: 'Hearing impaired',
+      machine: 'Machine translated'
+    },
+    use: 'Use',
+    useNamed: 'Use {{name}}',
+    downloading: 'Downloading…',
+    syncNote:
+      'Subtitles marked "Made for this file" match this exact video. The others may be out of sync; BakaSub does not adjust timing.',
+    quotaNote:
+      'Downloads are limited per day. Connect your OpenSubtitles account in Settings for a bigger limit.',
+    remaining_one: '{{count}} OpenSubtitles download left today',
+    remaining_other: '{{count}} OpenSubtitles downloads left today'
+  },
   media: {
     heading: 'What is this?',
     title: 'Title',
@@ -868,7 +911,20 @@ export const common = {
       openrouter: 'OpenRouter',
       openrouterHint: 'Used for every translation. Checked with OpenRouter before saving.',
       tmdb: 'TMDB (optional)',
-      tmdbHint: 'Recognizes movies and shows to give the AI their synopsis.'
+      tmdbHint: 'Recognizes movies and shows to give the AI their synopsis.',
+      opensubtitles: 'OpenSubtitles (optional)',
+      opensubtitlesHint: 'Finds subtitles for videos that have none, so they can be translated.',
+      opensubtitlesLabel: 'OpenSubtitles API key',
+      opensubtitlesAccount: 'Account (optional)',
+      opensubtitlesAccountHint:
+        'Signing in raises the daily download limit. The password is stored encrypted on this computer.',
+      username: 'Username',
+      usernameHint: 'Your OpenSubtitles username, not your email.',
+      password: 'Password',
+      connect: 'Sign in',
+      connecting: 'Signing in…',
+      connectedAs: 'Signed in as {{username}}',
+      disconnect: 'Sign out'
     },
     cache: {
       body: 'Every translated line is kept, so translating the same file again (or a similar one) is instant and free.',

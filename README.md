@@ -18,6 +18,7 @@ Windows x64 and Linux x64 · [GPL-3.0](./LICENSE) · [Website](https://bakasub.s
 - **Handles the whole MKV workflow**: extract a subtitle track, translate it, and mux it back into the video (or just save the subtitle file). Use each step on its own or run them all in one go.
 - **Shows the cost before you pay**: a token count and a price estimate from live OpenRouter pricing, plus a list of what will _not_ be translated.
 - **Remembers what it translated**: a local cache makes reprocessing a file nearly free.
+- **Works when the video has no subtitle**: bring your own subtitle file or search [OpenSubtitles](https://www.opensubtitles.com/) from the app, then translate it like any other.
 - **Knows what you are watching**: it reads the release name and can pull the synopsis and episode details from TMDB to improve the translation.
 - **Keeps your terms consistent** with presets (Movie, Series, Anime, Documentary, or your own) and a glossary for names, honorifics and jargon.
 - **Works in bulk**: translate, extract or mux a whole folder or season at once.
@@ -47,7 +48,7 @@ Progress, cost and results are in the **Queue**. A full walkthrough is in the [u
 
 ## Good to know
 
-- **Cost and privacy.** You pay OpenRouter directly for what you translate. The subtitle text, your notes and the glossary are sent to OpenRouter; the file name is sent to TMDB if you add a key. Nothing is sent without you starting a job, and nothing goes to the author. Details in the [user guide](./docs/user-guide.md#privacy-what-leaves-your-computer).
+- **Cost and privacy.** You pay OpenRouter directly for what you translate. The subtitle text, your notes and the glossary are sent to OpenRouter; the file name is sent to TMDB if you add a key, and to OpenSubtitles (with a fingerprint of the video file) if you add its key and search there. Nothing is sent without an action of yours, and nothing goes to the author. Details in the [user guide](./docs/user-guide.md#privacy-what-leaves-your-computer).
 - **Your data** stays in your user data folder. Updating or uninstalling the app does not delete it. Development builds (`npm run dev`) use a separate folder, so they never touch the installed app's data:
 
   |         | Installed           | Development             |
@@ -64,7 +65,7 @@ Progress, cost and results are in the **Queue**. A full walkthrough is in the [u
 
 - **Using the app**: [User guide](./docs/user-guide.md) · [Reporting a problem](./docs/reporting-issues.md)
 - **Contributing**: [CONTRIBUTING.md](./CONTRIBUTING.md) · [Development](./docs/development.md) · [Architecture](./docs/architecture.md)
-- **Internals** (English): [IPC](./docs/ipc.md) · [Sidecars](./docs/sidecars.md) · [Database](./docs/database.md) · [Subtitle parsing](./docs/parsing.md) · [Job Memory](./docs/job-memory.md) · [LLM translation](./docs/llm.md) · [Jobs](./docs/jobs.md) · [Preflight](./docs/preflight.md) · [Rate limits](./docs/rate-limits.md) · [Presets](./docs/presets.md) · [Media context](./docs/media-context.md) · [Logging](./docs/logging.md) · [Renderer](./docs/renderer.md) · [Brand tokens](./docs/brand-tokens.md) · [Website](./docs/site.md) · [Build and release](./docs/release.md)
+- **Internals** (English): [IPC](./docs/ipc.md) · [Sidecars](./docs/sidecars.md) · [Database](./docs/database.md) · [Subtitle parsing](./docs/parsing.md) · [Job Memory](./docs/job-memory.md) · [LLM translation](./docs/llm.md) · [Jobs](./docs/jobs.md) · [Preflight](./docs/preflight.md) · [Rate limits](./docs/rate-limits.md) · [Presets](./docs/presets.md) · [Media context](./docs/media-context.md) · [External subtitles](./docs/subtitle-sources.md) · [Logging](./docs/logging.md) · [Renderer](./docs/renderer.md) · [Brand tokens](./docs/brand-tokens.md) · [Website](./docs/site.md) · [Build and release](./docs/release.md)
 
 ## Support and contributing
 

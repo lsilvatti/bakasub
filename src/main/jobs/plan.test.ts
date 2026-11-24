@@ -24,6 +24,15 @@ describe('planFor(pipeline)', () => {
     expect(pipelineOutputMode({ alsoWriteSubtitle: true })).toBe('both')
     expect(pipelineOutputMode({ outputMode: 'subtitle', alsoWriteSubtitle: true })).toBe('subtitle')
   })
+  it('external subtitle: nothing to extract, in all three output modes', () => {
+    const ext = {
+      externalSubtitle: { path: '/s.srt', size: 1, format: 'srt', includeInMux: false }
+    }
+    const start = ['probe', 'preflight', 'translate']
+    expect(planFor(pipeline({ ...ext, outputMode: 'mux' }))).toEqual([...start, 'mux'])
+    expect(planFor(pipeline({ ...ext, outputMode: 'subtitle' }))).toEqual([...start, 'write'])
+    expect(planFor(pipeline({ ...ext, outputMode: 'both' }))).toEqual([...start, 'write', 'mux'])
+  })
   it('outros tipos não mudam', () => {
     expect(planFor({ kind: 'extract' } as JobSpec)).toEqual(['probe', 'extract', 'write'])
     expect(planFor({ kind: 'translate' } as JobSpec)).toEqual(['preflight', 'translate', 'write'])

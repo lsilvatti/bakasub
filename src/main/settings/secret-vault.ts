@@ -11,7 +11,8 @@ export interface SafeStorageLike {
 }
 
 /** Segredos conhecidos. Novos segredos entram aqui. */
-export type SecretKey = 'openrouter.apiKey' | 'tmdb.credential'
+export type SecretKey =
+  'openrouter.apiKey' | 'tmdb.credential' | 'opensubtitles.apiKey' | 'opensubtitles.login'
 
 /** `os`: chave mestra protegida pelo cofre do SO. `none`: guardada crua no banco. */
 export type VaultProtection = 'os' | 'none'

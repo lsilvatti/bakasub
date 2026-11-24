@@ -7,6 +7,8 @@ const ALLOWED_HOSTS = new Set([
   'www.themoviedb.org',
   'themoviedb.org',
   'openrouter.ai',
+  'www.opensubtitles.com',
+  'opensubtitles.com',
   // Settings → About: project repository and support page.
   'github.com',
   'buymeacoffee.com',

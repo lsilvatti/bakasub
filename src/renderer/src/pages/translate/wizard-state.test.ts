@@ -234,3 +234,58 @@ describe('step bar navigation', () => {
     expect(wizardReducer(s, { type: 'go', step: 'preset', defaults: d }).step).toBe('file')
   })
 })
+
+describe('external subtitle', () => {
+  const video = { type: 'file', path: '/a/ep01.mkv' } as const
+  const external = { path: '/subs/ep01.srt', name: 'ep01.srt', origin: 'file' } as const
+
+  it('lets a video with no track continue, and excludes the track', () => {
+    const s = run(video, { type: 'next' })
+    expect(canContinue(s)).toBe(false)
+    const withSub = wizardReducer(s, { type: 'subtitle', subtitle: external })
+    expect(canContinue(withSub)).toBe(true)
+
+    const swapped = run(
+      video,
+      { type: 'track', trackId: 2 },
+      { type: 'subtitle', subtitle: external }
+    )
+    expect(swapped.trackId).toBeNull()
+    expect(wizardReducer(swapped, { type: 'track', trackId: 3 })).toMatchObject({
+      trackId: 3,
+      subtitle: null
+    })
+  })
+
+  it('removing it keeps the track step incomplete; a new video clears it', () => {
+    const s = run(video, { type: 'subtitle', subtitle: external })
+    expect(wizardReducer(s, { type: 'subtitle', subtitle: null }).subtitle).toBeNull()
+    expect(wizardReducer(s, { type: 'file', path: '/a/ep02.mkv' }).subtitle).toBeNull()
+  })
+
+  it('builds a pipeline request with the subtitle instead of a track', () => {
+    const s = run(video, {
+      type: 'subtitle',
+      subtitle: { ...external, origin: 'opensubtitles', language: 'en' }
+    })
+    const req = buildJobRequest(s)
+    expect(req).toMatchObject({
+      kind: 'pipeline',
+      source: '/a/ep01.mkv',
+      subtitle: { path: '/subs/ep01.srt', language: 'en' }
+    })
+    expect(req).not.toHaveProperty('trackId')
+    expect(req).not.toHaveProperty('options.includeSourceSubtitle')
+  })
+
+  it('"also add the original" is sent only when an MKV is written', () => {
+    const s = run(
+      video,
+      { type: 'subtitle', subtitle: external },
+      { type: 'set', patch: { includeOriginal: true } }
+    )
+    expect(buildJobRequest(s)).toMatchObject({ options: { includeSourceSubtitle: true } })
+    const subtitleOnly = wizardReducer(s, { type: 'set', patch: { outputMode: 'subtitle' } })
+    expect(buildJobRequest(subtitleOnly)).not.toHaveProperty('options.includeSourceSubtitle')
+  })
+})

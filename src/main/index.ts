@@ -11,6 +11,7 @@ import { SecretVault } from './settings/secret-vault'
 import { createJobModule } from './jobs/create-job-module'
 import { artworkProtocolHandler } from './media-context/artwork-protocol'
 import { createMediaContextModule } from './media-context/create-media-context-module'
+import { createSubtitleSourceModule } from './subtitle-sources/create-subtitle-source-module'
 import { join } from 'node:path'
 import { emitToRenderers } from './ipc/events'
 import { registerIpc } from './ipc/register'
@@ -64,6 +65,14 @@ if (!app.requestSingleInstanceLock()) {
         logger.app.warn('secret vault master key was unrecoverable; secrets reset')
       redactor.add(await vault.get('openrouter.apiKey'))
       redactor.add(await vault.get('tmdb.credential'))
+      redactor.add(await vault.get('opensubtitles.apiKey'))
+
+      const subtitleSources = createSubtitleSourceModule({
+        vault,
+        cacheDir: paths.cache(),
+        appVersion: app.getVersion(),
+        onSecret: (secret) => redactor.add(secret)
+      })
 
       const mediaContext = createMediaContextModule({
         db: database.db,
@@ -163,7 +172,8 @@ if (!app.requestSingleInstanceLock()) {
         freeQuota: jobModule.freeQuota,
         validateApiKey: jobModule.validateApiKey,
         tmdb: mediaContext.tmdb,
-        mediaContext: mediaContext.service
+        mediaContext: mediaContext.service,
+        subtitleSources
       })
       openMainWindow()
 

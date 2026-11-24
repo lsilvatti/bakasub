@@ -32,7 +32,7 @@ export function planFor(spec: JobSpec): JobStep[] {
       const mode = pipelineOutputMode(spec)
       return [
         'probe',
-        'extract',
+        ...(spec.externalSubtitle ? [] : (['extract'] as const)),
         'preflight',
         'translate',
         ...(mode === 'mux' ? [] : (['write'] as const)),

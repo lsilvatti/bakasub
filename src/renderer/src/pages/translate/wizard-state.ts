@@ -1,13 +1,18 @@
 import type { JobCreateRequest, JobMemoryMode, OutputMode } from '@shared/ipc-contract'
 import { noMedia, type MediaChoice } from '@renderer/components/media/media-choice'
+import type { ExternalSubtitleValue } from '@renderer/components/media/external-subtitle'
 import { sourceKindOf, type SourceKind } from '@shared/file-types'
 
 export type WizardStep = 'file' | 'track' | 'preset' | 'output'
+
+export type ExternalSubtitle = ExternalSubtitleValue
 
 export interface WizardState {
   step: WizardStep
   file: { path: string; name: string; kind: SourceKind } | null
   trackId: number | null
+  subtitle: ExternalSubtitle | null
+  includeOriginal: boolean
   /** `null` = the TMDB suggestion for the work, else the default from Settings. */
   presetId: string | null
   model: string | null
@@ -33,6 +38,8 @@ export const initialWizard: WizardState = {
   step: 'file',
   file: null,
   trackId: null,
+  subtitle: null,
+  includeOriginal: false,
   presetId: null,
   model: null,
   targetLang: null,
@@ -56,6 +63,7 @@ export const NOTES_MAX = 4000
 export type WizardAction =
   | { type: 'file'; path: string }
   | { type: 'track'; trackId: number }
+  | { type: 'subtitle'; subtitle: ExternalSubtitle | null }
   | {
       type: 'set'
       patch: Partial<
@@ -69,6 +77,7 @@ export type WizardAction =
           | 'outputMode'
           | 'overwrite'
           | 'memory'
+          | 'includeOriginal'
         >
       >
     }
@@ -97,13 +106,16 @@ export function wizardReducer(s: WizardState, a: WizardAction): WizardState {
         ...s,
         file: { path: a.path, name: baseName(a.path), kind },
         trackId: null,
+        subtitle: null,
         media: noMedia,
         furthest: 0,
         notice: s.file ? 'file-changed' : null
       }
     }
     case 'track':
-      return { ...s, trackId: a.trackId }
+      return { ...s, trackId: a.trackId, subtitle: null }
+    case 'subtitle':
+      return { ...s, subtitle: a.subtitle, trackId: a.subtitle ? null : s.trackId }
     case 'set':
       return { ...s, ...a.patch }
     case 'mux':
@@ -146,7 +158,7 @@ export function stepValid(
     case 'file':
       return s.file !== null
     case 'track':
-      return s.trackId !== null
+      return s.trackId !== null || s.subtitle !== null
     case 'preset':
       return (
         !!(s.model ?? defaults.model) &&
@@ -196,14 +208,24 @@ export function buildJobRequest(
   const write = s.overwrite ? { overwrite: true } : {}
   if (s.file.kind === 'subtitle')
     return { kind: 'translate', ...common, ...(s.overwrite ? { options: write } : {}) }
-  if (s.trackId === null) throw new Error('No track selected')
   const outputMode = s.outputMode ?? defaultMode
   // Only a written video has mux options: the subtitle-only mode never touches the MKV.
-  const options = {
-    outputMode,
-    ...(outputMode === 'subtitle' ? {} : { ...s.mux }),
-    ...write
-  }
+  const muxed = outputMode !== 'subtitle'
+  const options = { outputMode, ...(muxed ? { ...s.mux } : {}), ...write }
+  if (s.subtitle)
+    return {
+      kind: 'pipeline',
+      ...common,
+      subtitle: {
+        path: s.subtitle.path,
+        ...(s.subtitle.language ? { language: s.subtitle.language } : {})
+      },
+      options: {
+        ...options,
+        ...(muxed && s.includeOriginal ? { includeSourceSubtitle: true } : {})
+      }
+    }
+  if (s.trackId === null) throw new Error('No track selected')
   return { kind: 'pipeline', ...common, trackId: s.trackId, options }
 }
 

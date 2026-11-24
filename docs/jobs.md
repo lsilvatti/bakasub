@@ -21,7 +21,9 @@ During the translate step `progress.translation` carries `done/total/cached`, `c
 | `extract`   | MKV + track ids                                 | probe → extract → write                                   | `<base>.<lang\|und>.<ext>` (`naming: 'player'`, default with one track; same language twice → `<base>.<lang>.<n>.<ext>`) or `<base>.<trackId>.<lang\|und>.<ext>` (`naming: 'track'`, default with several tracks) |
 | `translate` | `.srt` / `.ass` / `.ssa` / `.vtt`               | translate → write                                         | `<base>.<targetLang>.<ext>`                                                                                                                                                                                       |
 | `mux`       | MKV + 1..32 subtitles (language, name, default) | probe → validate → mux                                    | `<base>.<lang>.mkv`                                                                                                                                                                                               |
-| `pipeline`  | MKV + track id                                  | probe → extract → preflight → translate → [write] → [mux] | by `outputMode` (see below): `<base>.<targetLang>.mkv`, `<base>.<targetLang>.<ext>`, or both                                                                                                                      |
+| `pipeline`  | MKV + track id, or MKV + external subtitle      | probe → extract → preflight → translate → [write] → [mux] | by `outputMode` (see below): `<base>.<targetLang>.mkv`, `<base>.<targetLang>.<ext>`, or both                                                                                                                      |
+
+A `pipeline` whose source is an **external subtitle** (a file from disk or an OpenSubtitles download, for a video with no usable track) has no `extract` step and can also embed that subtitle (`options.includeSourceSubtitle`). See [`subtitle-sources.md`](./subtitle-sources.md).
 
 ### Pipeline output mode (`options.outputMode`)
 

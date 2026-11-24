@@ -66,6 +66,7 @@ export const common: LocaleShape<typeof en> = {
     'openrouter-key': 'Como conseguir uma key do OpenRouter',
     'openrouter-limits': 'Limites, esperas e novas tentativas',
     'tmdb-key': 'Como conseguir uma key do TMDB',
+    'opensubtitles-key': 'Como conseguir uma API key do OpenSubtitles',
     'choosing-models': 'Como escolher um modelo',
     openExternal: 'Abre no navegador'
   },
@@ -251,6 +252,16 @@ export const common: LocaleShape<typeof en> = {
         'O vídeo tem {{count}} fontes anexadas; elas são mantidas para legendas com estilo (.ass).',
       unknownLang: 'Idioma desconhecido'
     },
+    external: {
+      other: 'Usar outra legenda',
+      body: 'Traduza uma legenda de fora do vídeo em vez de uma das faixas dele.',
+      bodyNone:
+        'Escolha um arquivo de legenda que você já tem ou busque no OpenSubtitles uma que combine com este vídeo.',
+      file: 'Escolher arquivo de legenda',
+      search: 'Buscar no OpenSubtitles',
+      remove: 'Remover esta legenda',
+      origin: { file: 'Seu arquivo', opensubtitles: 'OpenSubtitles' }
+    },
     preset: {
       heading: 'Como traduzir',
       suggested: {
@@ -286,6 +297,7 @@ export const common: LocaleShape<typeof en> = {
       reset: 'Usar a pasta de origem',
       setDefault: 'Tornar a legenda traduzida a faixa padrão',
       keepOriginal: 'Manter as legendas originais no vídeo',
+      includeOriginal: 'Incluir também a legenda original no vídeo',
       mode: {
         label: 'O que salvar',
         mux: 'MKV com a legenda embutida',
@@ -804,6 +816,37 @@ export const common: LocaleShape<typeof en> = {
       UNTRANSLATED_CONTENT_FILTERED: 'Bloqueada pela moderação do provedor'
     }
   },
+  opensubtitles: {
+    title: 'Buscar no OpenSubtitles',
+    description: 'Legendas para este vídeo, para usar como origem da tradução.',
+    needsKey:
+      'O OpenSubtitles pede uma API key sua. É gratuita; adicione uma vez e ela fica salva em Configurações.',
+    query: 'Título',
+    season: 'Temporada',
+    episode: 'Episódio',
+    languages: 'Idiomas da legenda',
+    anyLanguage: 'Qualquer idioma',
+    search: 'Buscar',
+    searching: 'Buscando…',
+    noResults: 'Nenhuma legenda encontrada. Tente outro título ou outro idioma.',
+    downloads_one: '{{count}} download',
+    downloads_other: '{{count}} downloads',
+    badge: {
+      hashMatch: 'Feita para este arquivo',
+      trusted: 'Uploader confiável',
+      hearingImpaired: 'Para surdos',
+      machine: 'Tradução automática'
+    },
+    use: 'Usar',
+    useNamed: 'Usar {{name}}',
+    downloading: 'Baixando…',
+    syncNote:
+      'As legendas marcadas com "Feita para este arquivo" batem com este vídeo exato. As outras podem estar fora de sincronia; o BakaSub não ajusta o tempo.',
+    quotaNote:
+      'Os downloads têm limite diário. Conecte sua conta do OpenSubtitles em Configurações para um limite maior.',
+    remaining_one: 'Resta {{count}} download do OpenSubtitles hoje',
+    remaining_other: 'Restam {{count}} downloads do OpenSubtitles hoje'
+  },
   media: {
     heading: 'O que é isto?',
     title: 'Título',
@@ -880,7 +923,21 @@ export const common: LocaleShape<typeof en> = {
       openrouter: 'OpenRouter',
       openrouterHint: 'Usada em toda tradução. Conferida com o OpenRouter antes de salvar.',
       tmdb: 'TMDB (opcional)',
-      tmdbHint: 'Reconhece filmes e séries para passar a sinopse para a IA.'
+      tmdbHint: 'Reconhece filmes e séries para passar a sinopse para a IA.',
+      opensubtitles: 'OpenSubtitles (opcional)',
+      opensubtitlesHint:
+        'Encontra legendas para vídeos que não têm nenhuma, para poder traduzi-las.',
+      opensubtitlesLabel: 'API key do OpenSubtitles',
+      opensubtitlesAccount: 'Conta (opcional)',
+      opensubtitlesAccountHint:
+        'Entrar na conta aumenta o limite diário de downloads. A senha fica guardada criptografada neste computador.',
+      username: 'Usuário',
+      usernameHint: 'Seu nome de usuário do OpenSubtitles, não o e-mail.',
+      password: 'Senha',
+      connect: 'Entrar',
+      connecting: 'Entrando…',
+      connectedAs: 'Conectado como {{username}}',
+      disconnect: 'Sair'
     },
     cache: {
       body: 'Toda fala traduzida fica guardada, então traduzir o mesmo arquivo de novo (ou um parecido) é instantâneo e gratuito.',

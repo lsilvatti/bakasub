@@ -6,6 +6,10 @@ import { FileDrop } from '@renderer/components/files/file-drop'
 import { JobDetail } from '@renderer/components/jobs/job-detail'
 import { Backdrop } from '@renderer/components/media/backdrop'
 import type { MediaChoice } from '@renderer/components/media/media-choice'
+import {
+  ExternalSubtitle,
+  type ExternalSubtitleValue
+} from '@renderer/components/media/external-subtitle'
 import { MediaPanel } from '@renderer/components/media/media-panel'
 import { TrackPicker } from '@renderer/components/media/track-picker'
 import { Button } from '@renderer/components/ui/button'
@@ -58,6 +62,10 @@ export function TranslatePage({
     (ids: number[]) => ids[0] !== undefined && dispatch({ type: 'track', trackId: ids[0] }),
     [dispatch]
   )
+  const onSubtitle = useCallback(
+    (subtitle: ExternalSubtitleValue | null) => dispatch({ type: 'subtitle', subtitle }),
+    [dispatch]
+  )
   const onMedia = useCallback(
     (patch: Partial<MediaChoice>) => dispatch({ type: 'media', patch }),
     [dispatch]
@@ -74,6 +82,7 @@ export function TranslatePage({
   const video = state.file?.kind === 'video' ? state.file.path : null
   const probe = useProbe(video).data
   const track = probe?.subtitles.find((tr) => tr.id === state.trackId)
+  const noUsableTrack = !!probe && !probe.subtitles.some((tr) => tr.format !== null)
   const lookup = useMediaLookup(state.media.ref, null).data
   const work = lookup && state.media.ref && lookup.details.id === state.media.ref.id ? lookup : null
   // The details only reach the AI (and the backdrop) when included; the preset suggestion
@@ -109,9 +118,12 @@ export function TranslatePage({
 
   const isVideo = state.file?.kind === 'video'
   const outputMode = state.outputMode ?? prefs.mode
-  const subtitleExt = isVideo
-    ? (track?.format ?? 'srt')
-    : (state.file?.path.split('.').pop()?.toLowerCase() ?? 'srt')
+  const extOf = (path: string | undefined): string => path?.split('.').pop()?.toLowerCase() ?? 'srt'
+  const subtitleExt = !isVideo
+    ? extOf(state.file?.path)
+    : state.subtitle
+      ? extOf(state.subtitle.path)
+      : (track?.format ?? 'srt')
   const outputNames =
     state.file && targetLang
       ? translateOutputNames(
@@ -200,12 +212,25 @@ export function TranslatePage({
                     </>
                   ) : null}
                   {state.step === 'track' && state.file ? (
-                    <TrackPicker
-                      path={state.file.path}
-                      mode="single"
-                      value={state.trackId === null ? [] : [state.trackId]}
-                      onChange={onTrack}
-                    />
+                    <>
+                      {noUsableTrack ? null : (
+                        <TrackPicker
+                          path={state.file.path}
+                          mode="single"
+                          value={state.trackId === null ? [] : [state.trackId]}
+                          onChange={onTrack}
+                          autoSelect={state.subtitle === null}
+                        />
+                      )}
+                      {probe ? (
+                        <ExternalSubtitle
+                          videoPath={state.file.path}
+                          value={state.subtitle}
+                          onChange={onSubtitle}
+                          prominent={noUsableTrack}
+                        />
+                      ) : null}
+                    </>
                   ) : null}
                   {state.step === 'preset' ? (
                     <PresetStep
@@ -237,6 +262,10 @@ export function TranslatePage({
                       mode={outputMode}
                       mux={state.mux}
                       overwrite={state.overwrite}
+                      includeOriginal={state.subtitle ? state.includeOriginal : undefined}
+                      onIncludeOriginal={(includeOriginal) =>
+                        dispatch({ type: 'set', patch: { includeOriginal } })
+                      }
                       preview={preview}
                       onFolder={(outputDir) => dispatch({ type: 'set', patch: { outputDir } })}
                       onMode={(m) => dispatch({ type: 'set', patch: { outputMode: m } })}

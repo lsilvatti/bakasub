@@ -26,11 +26,13 @@ export function OutputStep({
   mode,
   mux,
   overwrite,
+  includeOriginal,
   preview,
   onFolder,
   onMode,
   onMux,
   onOverwrite,
+  onIncludeOriginal,
   summary
 }: {
   video: boolean
@@ -38,11 +40,13 @@ export function OutputStep({
   mode: OutputMode
   mux: MuxChoice
   overwrite: boolean
+  includeOriginal?: boolean
   preview?: OutputPreview | null
   onFolder: (dir: string | null) => void
   onMode: (mode: OutputMode) => void
   onMux: (patch: Partial<MuxChoice>) => void
   onOverwrite: (v: boolean) => void
+  onIncludeOriginal?: (v: boolean) => void
   /** Replaces the closing note (the batch has its own). */
   summary?: React.ReactNode
 }): React.JSX.Element {
@@ -90,6 +94,15 @@ export function OutputStep({
               {o.label}
             </label>
           ))}
+          {includeOriginal !== undefined ? (
+            <label className="flex items-center gap-2.5 text-sm">
+              <Checkbox
+                checked={includeOriginal}
+                onCheckedChange={(v) => onIncludeOriginal?.(v === true)}
+              />
+              {t('translate.output.includeOriginal')}
+            </label>
+          ) : null}
         </div>
       ) : null}
       {preview ? <NamePreview {...preview} /> : null}

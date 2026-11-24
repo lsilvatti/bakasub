@@ -16,6 +16,7 @@ const developmentOrder = [
   'preflight.md',
   'presets.md',
   'media-context.md',
+  'subtitle-sources.md',
   'sidecars.md',
   'database.md',
   'logging.md',

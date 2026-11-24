@@ -46,6 +46,11 @@ const codes = {
     'Choose a target language first: add one in Languages and make it the default.',
   TMDB_AUTH: 'TMDB rejected the key. Check it in Settings.',
   TMDB_KEY_MISSING: 'Add a TMDB key in Settings to look up titles. It is optional.',
+  OPENSUBTITLES_AUTH:
+    'OpenSubtitles rejected the API key or the account. Check them in Settings (the account takes your username, not your email).',
+  OPENSUBTITLES_KEY_MISSING: 'Add an OpenSubtitles API key in Settings to search for subtitles.',
+  OPENSUBTITLES_QUOTA:
+    'The OpenSubtitles download limit for today was reached. Try again tomorrow, or sign in to your account in Settings for a bigger limit.',
   URL_NOT_ALLOWED: 'This link cannot be opened from BakaSub.',
   UPDATE_UNSUPPORTED: 'Updates are only installed on an AppImage or the Windows installer.',
   UPDATE_NOT_READY: 'No update is ready to install.',

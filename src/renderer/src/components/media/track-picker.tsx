@@ -17,22 +17,24 @@ export function TrackPicker({
   path,
   mode,
   value,
-  onChange
+  onChange,
+  autoSelect = true
 }: {
   path: string
   mode: 'single' | 'multi'
   value: readonly number[]
   onChange: (ids: number[]) => void
+  autoSelect?: boolean
 }): React.JSX.Element {
   const { t, i18n } = useTranslation()
   const probe = useProbe(path)
   const preferred = useSettings().data?.['tracks.preferredSourceLangs']
 
   useEffect(() => {
-    if (value.length > 0 || !probe.data) return
+    if (!autoSelect || value.length > 0 || !probe.data) return
     const id = pickTrack(probe.data.subtitles, preferred ?? ['en'])
     if (id !== null) onChange([id])
-  }, [probe.data, preferred, value.length, onChange])
+  }, [autoSelect, probe.data, preferred, value.length, onChange])
 
   if (probe.isPending)
     return <p className="text-sm text-muted-foreground">{t('translate.track.loading')}</p>
