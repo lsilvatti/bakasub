@@ -5,6 +5,7 @@ import type { SecretVault } from '../../settings/secret-vault'
 import type { OpenSubtitlesClient } from '../../subtitle-sources/opensubtitles-client'
 import type { OpenSubtitlesSession } from '../../subtitle-sources/opensubtitles-session'
 import type { SubtitleSourceService } from '../../subtitle-sources/subtitle-source.service'
+import { AbortRegistry } from '../abort-registry'
 import { createHandler } from '../create-handler'
 
 const secret = (min: number, max: number): z.ZodString =>
@@ -14,6 +15,7 @@ const secret = (min: number, max: number): z.ZodString =>
     .max(max)
     .regex(/^[\x21-\x7e]+$/)
 const Num = z.number().int().min(0).max(9999)
+const SearchId = z.uuid()
 
 export function registerSubtitleHandlers(deps: {
   vault: SecretVault
@@ -24,6 +26,7 @@ export function registerSubtitleHandlers(deps: {
   }
 }): void {
   const { client, session, service } = deps.subtitleSources
+  const searches = new AbortRegistry()
   const status = async (): Promise<OpenSubtitlesStatus> => ({
     keyPresent: await deps.vault.has('opensubtitles.apiKey'),
     username: await session.username()
@@ -78,9 +81,17 @@ export function registerSubtitleHandlers(deps: {
         )
         .max(10),
       season: Num.optional(),
-      episode: Num.optional()
+      episode: Num.optional(),
+      searchId: SearchId.optional()
     }),
-    handle: (req) => service.search(req)
+    handle: ({ searchId, ...req }, event) =>
+      searchId
+        ? searches.run(event.sender.id, searchId, (signal) => service.search(req, signal))
+        : service.search(req)
+  })
+  createHandler('subtitles:cancel-search', {
+    input: z.object({ searchId: SearchId }),
+    handle: ({ searchId }, event) => ({ cancelled: searches.cancel(event.sender.id, searchId) })
   })
   createHandler('subtitles:download', {
     input: z.object({ fileId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER) }),

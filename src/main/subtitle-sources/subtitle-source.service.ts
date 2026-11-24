@@ -11,6 +11,7 @@ import { readSubtitle } from '../jobs/steps/subtitle-io'
 import { canonicalTag } from '../media/languages'
 import { MAX_SUBTITLE_BYTES, MEDIA_EXTENSIONS, validateInputFile } from '../media/path-guard'
 import { parseReleaseName } from '../media-context/release-name'
+import { cancelled, detach } from './abortable'
 import type { OpenSubtitlesClient, OpenSubtitlesFile } from './opensubtitles-client'
 import type { OpenSubtitlesSession } from './opensubtitles-session'
 
@@ -68,16 +69,8 @@ function toResult(f: OpenSubtitlesFile, hashMatch: boolean): SubtitleSearchResul
   }
 }
 
-const cancelled = (): AppError => new AppError('CANCELLED', 'Subtitle download cancelled')
-
-/** Settles with `shared`, or rejects with `CANCELLED` as soon as `signal` aborts, whichever first. */
-function detach<T>(shared: Promise<T>, signal: AbortSignal): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = (): void => reject(cancelled())
-    signal.addEventListener('abort', onAbort, { once: true })
-    shared.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort))
-  })
-}
+const DOWNLOAD = 'Subtitle download'
+const SEARCH = 'Subtitle search'
 
 export class SubtitleSourceService {
   private readonly fetch: typeof fetch
@@ -95,7 +88,9 @@ export class SubtitleSourceService {
     this.fetch = d.fetch ?? globalThis.fetch
   }
 
+  /** `signal` reaches both OpenSubtitles requests (and a re-login wait); abort rejects `CANCELLED`. */
   async search(req: SubtitleSearchRequest, signal?: AbortSignal): Promise<SubtitleSearchResponse> {
+    if (signal?.aborted) throw cancelled(SEARCH)
     const video = await validateInputFile(req.videoPath, MEDIA_EXTENSIONS)
     const typed = req.query?.trim()
     const release = parseReleaseName(video.path)
@@ -104,13 +99,18 @@ export class SubtitleSourceService {
     const episode = typed ? req.episode : (req.episode ?? release.episode)
     const languages = [...new Set(req.languages.map((l) => l.toLowerCase()))]
     const moviehash = await this.d.hash(video.path).catch(() => null)
+    if (signal?.aborted) throw cancelled(SEARCH)
 
     const [byHash, byQuery] = await Promise.all([
       moviehash
-        ? this.d.session.run((auth) => this.d.client.search({ moviehash, languages }, auth, signal))
+        ? this.d.session.run(
+            (auth) => this.d.client.search({ moviehash, languages }, auth, signal),
+            signal
+          )
         : Promise.resolve([]),
-      this.d.session.run((auth) =>
-        this.d.client.search({ query, languages, season, episode }, auth, signal)
+      this.d.session.run(
+        (auth) => this.d.client.search({ query, languages, season, episode }, auth, signal),
+        signal
       )
     ])
 
@@ -133,7 +133,7 @@ export class SubtitleSourceService {
    * so a later call after a failure starts a fresh attempt.
    */
   download(fileId: number, signal?: AbortSignal): Promise<SubtitleDownload> {
-    if (signal?.aborted) return Promise.reject(cancelled())
+    if (signal?.aborted) return Promise.reject(cancelled(DOWNLOAD))
     let shared = this.inflight.get(fileId)
     if (!shared) {
       const started = this.downloadToCache(fileId).finally(() => {
@@ -142,7 +142,7 @@ export class SubtitleSourceService {
       this.inflight.set(fileId, started)
       shared = started
     }
-    return signal ? detach(shared, signal) : shared
+    return signal ? detach(shared, signal, DOWNLOAD) : shared
   }
 
   private async downloadToCache(fileId: number): Promise<SubtitleDownload> {

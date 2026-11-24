@@ -118,7 +118,9 @@ const api: BakaSubApi = {
     preflight: (id) => invoke('jobs:preflight', { id })
   },
   subtitles: {
-    search: (request) => invoke('subtitles:search', request),
+    search: (request, searchId) =>
+      invoke('subtitles:search', searchId ? { ...request, searchId } : request),
+    cancelSearch: (searchId) => invoke('subtitles:cancel-search', { searchId }),
     download: (fileId) => invoke('subtitles:download', { fileId })
   },
   files: {

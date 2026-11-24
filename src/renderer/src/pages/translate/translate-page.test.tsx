@@ -227,7 +227,11 @@ function setup(
         })
     },
     dialog: { openFiles: () => ok({ paths: [path] }) },
-    subtitles: { search: subtitleSearch, download: subtitleDownload },
+    subtitles: {
+      search: subtitleSearch,
+      cancelSearch: () => ok({ cancelled: false }),
+      download: subtitleDownload
+    },
     media: {
       ...media,
       probe: () =>
@@ -622,10 +626,13 @@ describe('a video with no subtitle to translate', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Search OpenSubtitles' }))
     const dialog = await screen.findByRole('dialog')
     expect(await within(dialog).findByText('Made for this file')).toBeTruthy()
-    expect(subtitleSearch).toHaveBeenCalledWith({
-      videoPath: '/videos/Show.S01E01.mkv',
-      languages: onboardedSettings['tracks.preferredSourceLangs']
-    })
+    expect(subtitleSearch).toHaveBeenCalledWith(
+      {
+        videoPath: '/videos/Show.S01E01.mkv',
+        languages: onboardedSettings['tracks.preferredSourceLangs']
+      },
+      expect.any(String)
+    )
     expect((within(dialog).getByLabelText('Title') as HTMLInputElement).value).toBe('Show')
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Use Show.S01E01.WEB' }))

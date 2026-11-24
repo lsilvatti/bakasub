@@ -1096,7 +1096,13 @@ export interface IpcInvokeContract {
     res: OpenSubtitlesStatus
   }
   'settings:opensubtitles-logout': { req: void; res: OpenSubtitlesStatus }
-  'subtitles:search': { req: SubtitleSearchRequest; res: SubtitleSearchResponse }
+  /** `searchId` (UUID) makes the search cancellable through `subtitles:cancel-search`. */
+  'subtitles:search': {
+    req: SubtitleSearchRequest & { searchId?: string }
+    res: SubtitleSearchResponse
+  }
+  /** Aborts the sender's search in flight; it then fails with `CANCELLED`. `false` if none. */
+  'subtitles:cancel-search': { req: { searchId: string }; res: { cancelled: boolean } }
   'subtitles:download': { req: { fileId: number }; res: SubtitleDownload }
   /** Só o nome do arquivo é usado (nada é lido do disco). */
   'media:identify': { req: { name: string }; res: MediaIdentification }
@@ -1241,6 +1247,7 @@ export const INVOKE_CHANNELS = [
   'settings:opensubtitles-login',
   'settings:opensubtitles-logout',
   'subtitles:search',
+  'subtitles:cancel-search',
   'subtitles:download',
   'media:identify',
   'media:search',
@@ -1394,7 +1401,11 @@ export interface BakaSubApi {
     ): Promise<IpcResult<{ estimate: PreflightEstimate; coverage: CoverageReport } | null>>
   }
   subtitles: {
-    search(request: SubtitleSearchRequest): Promise<IpcResult<SubtitleSearchResponse>>
+    search(
+      request: SubtitleSearchRequest,
+      searchId?: string
+    ): Promise<IpcResult<SubtitleSearchResponse>>
+    cancelSearch(searchId: string): Promise<IpcResult<{ cancelled: boolean }>>
     download(fileId: number): Promise<IpcResult<SubtitleDownload>>
   }
   files: {

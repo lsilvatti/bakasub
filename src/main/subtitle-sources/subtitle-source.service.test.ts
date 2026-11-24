@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readdirSync, realpathSync, writeFileSync } fro
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { AppError } from '../errors'
 import type { OpenSubtitlesAuth, OpenSubtitlesFile } from './opensubtitles-client'
 import { isAllowedDownloadLink, SubtitleSourceService } from './subtitle-source.service'
 
@@ -124,6 +125,52 @@ describe('search', () => {
     await expect(
       service.search({ videoPath: join(dir, 'x.srt'), languages: [] })
     ).rejects.toMatchObject({ code: 'INVALID_PATH', message: 'extension' })
+    expect(search).not.toHaveBeenCalled()
+  })
+})
+
+describe('search cancellation', () => {
+  /** Client and session that behave like the real ones: both honour the signal they are given. */
+  function abortable(): {
+    service: SubtitleSourceService
+    search: ReturnType<typeof vi.fn>
+    run: ReturnType<typeof vi.fn>
+  } {
+    const search = vi.fn(
+      (_p: unknown, _a: unknown, signal?: AbortSignal) =>
+        new Promise<OpenSubtitlesFile[]>((_resolve, reject) =>
+          signal?.addEventListener('abort', () =>
+            reject(new AppError('CANCELLED', 'OpenSubtitles request cancelled'))
+          )
+        )
+    )
+    const run = vi.fn((call: (a?: OpenSubtitlesAuth) => Promise<unknown>) => call(undefined))
+    const service = new SubtitleSourceService({
+      client: { search, requestDownload: vi.fn() } as never,
+      session: { run } as never,
+      cacheDir: join(dir, 'cache'),
+      hash: async () => 'abcdef0123456789'
+    })
+    return { service, search, run }
+  }
+
+  it('aborting mid-flight rejects CANCELLED; the signal reaches both requests and both runs', async () => {
+    const { service, search, run } = abortable()
+    const ctrl = new AbortController()
+    const pending = service.search({ videoPath: video, languages: ['en'] }, ctrl.signal)
+    await vi.waitFor(() => expect(search).toHaveBeenCalledTimes(2))
+    ctrl.abort()
+    await expect(pending).rejects.toMatchObject({ code: 'CANCELLED' })
+    expect(search.mock.calls.map((c) => c[2])).toEqual([ctrl.signal, ctrl.signal])
+    expect(run.mock.calls.map((c) => c[1])).toEqual([ctrl.signal, ctrl.signal])
+  })
+
+  it('an already aborted signal sends nothing', async () => {
+    const { service, search, run } = abortable()
+    await expect(
+      service.search({ videoPath: video, languages: ['en'] }, AbortSignal.abort())
+    ).rejects.toMatchObject({ code: 'CANCELLED' })
+    expect(run).not.toHaveBeenCalled()
     expect(search).not.toHaveBeenCalled()
   })
 })

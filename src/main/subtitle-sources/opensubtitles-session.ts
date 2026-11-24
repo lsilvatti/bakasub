@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { AppError } from '../errors'
+import { cancelled, detach } from './abortable'
 import type { OpenSubtitlesAuth, OpenSubtitlesClient } from './opensubtitles-client'
 
 const Stored = z.object({ username: z.string().min(1), password: z.string().min(1) })
@@ -52,36 +53,44 @@ export class OpenSubtitlesSession {
     await this.d.store.delete()
   }
 
+  /**
+   * `signal` only detaches this caller from a shared re-login (which keeps running, bounded by the
+   * client timeout, for the other callers); the call itself gets the signal through its closure.
+   */
   async run<T>(
     call: (auth: OpenSubtitlesAuth | undefined) => Promise<T>,
     signal?: AbortSignal
   ): Promise<T> {
+    if (signal?.aborted) throw cancelled(RUN)
     const auth = await this.current(signal)
     try {
       return await call(auth ?? undefined)
     } catch (err) {
       if (!auth || !(err instanceof AppError) || err.code !== 'OPENSUBTITLES_AUTH') throw err
       if (this.auth === auth) this.auth = null
+      if (signal?.aborted) throw cancelled(RUN)
       return call((await this.current(signal)) ?? undefined)
     }
   }
 
   private async current(signal?: AbortSignal): Promise<OpenSubtitlesAuth | null> {
     if (this.auth) return this.auth
-    if (this.pending) return this.pending
-    const pending = this.relogin(this.generation, signal).finally(() => {
-      if (this.pending === pending) this.pending = null
-    })
-    return (this.pending = pending)
+    if (!this.pending) {
+      const pending = this.relogin(this.generation).finally(() => {
+        if (this.pending === pending) this.pending = null
+      })
+      this.pending = pending
+    }
+    return signal ? detach(this.pending, signal, RUN) : this.pending
   }
 
   /** Re-login from the stored account; a result from a stale generation is discarded. */
-  private async relogin(gen: number, signal?: AbortSignal): Promise<OpenSubtitlesAuth | null> {
+  private async relogin(gen: number): Promise<OpenSubtitlesAuth | null> {
     const login = await this.stored()
     if (gen !== this.generation) return this.auth
     if (!login) return null
     this.d.onSecret?.(login.password)
-    const auth = await this.d.client.login(login.username, login.password, signal)
+    const auth = await this.d.client.login(login.username, login.password)
     this.d.onSecret?.(auth.token)
     if (gen !== this.generation) return this.auth
     return (this.auth = auth)
@@ -105,6 +114,8 @@ export class OpenSubtitlesSession {
     }
   }
 }
+
+const RUN = 'OpenSubtitles request'
 
 const superseded = (): AppError =>
   new AppError('CANCELLED', 'OpenSubtitles login superseded by a logout or another login')

@@ -72,6 +72,14 @@ The service merges the results by file id and flags the hash matches. It orders 
 
 Query parameters are sent lower-cased and sorted, because the API redirects otherwise. Searching spends no download quota. A file smaller than 64 KiB has no hash and is searched by title only.
 
+#### Cancelling a search
+
+A search is cancellable. The renderer tags it with a `searchId` (a UUID it generates per fetch) and, to drop it, calls `subtitles:cancel-search` with that id. The handler keeps one `AbortController` per in-flight search in an `AbortRegistry` (`src/main/ipc/abort-registry.ts`), keyed by `webContents.id` + `searchId`, so a frame can only cancel its own searches. The signal goes to `service.search(req, signal)`, which passes it to both `session.run` calls and to both client requests; the search then rejects with `CANCELLED`. An untagged search simply has no signal.
+
+In `session.run(call, signal)` the signal only detaches the caller from a shared re-login (the login itself keeps running, bounded by the client timeout, so another caller waiting on it still gets the token). A signal already aborted on entry sends nothing.
+
+On the renderer, `useSubtitleSearch` reads TanStack Query's `signal`: when the query loses its last observer (the dialog is closed and unmounts, or a new search changes the key), TanStack aborts it, the hook calls `cancelSearch`, and the query reverts to its previous state. A cancelled search never shows as an error, and reopening the dialog searches again.
+
 ### Download
 
 `subtitles:download` takes a file id and does this:
@@ -89,14 +97,14 @@ Concurrent calls for the same file id share one download: one `/download` reques
 
 ### Errors
 
-| Code                        | When                                                                                                       |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `OPENSUBTITLES_KEY_MISSING` | The vault has no API key. No request is made.                                                              |
-| `OPENSUBTITLES_AUTH`        | 401 or 403, after one re-login. Also 400 on `/login`, for a wrong user name or password.                   |
-| `OPENSUBTITLES_QUOTA`       | 406 on `/download`. The daily download quota is used up.                                                   |
-| `NETWORK`                   | Unreachable, 429 or 5xx, an unexpected response shape, or a download link (or redirect) on another domain. |
-| `INVALID_SUBTITLE`          | The downloaded file is empty, too large or does not parse.                                                 |
-| `CANCELLED`                 | An explicit login overtaken by a logout or another login, or a download caller whose signal aborted.       |
+| Code                        | When                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `OPENSUBTITLES_KEY_MISSING` | The vault has no API key. No request is made.                                                                            |
+| `OPENSUBTITLES_AUTH`        | 401 or 403, after one re-login. Also 400 on `/login`, for a wrong user name or password.                                 |
+| `OPENSUBTITLES_QUOTA`       | 406 on `/download`. The daily download quota is used up.                                                                 |
+| `NETWORK`                   | Unreachable, 429 or 5xx, an unexpected response shape, or a download link (or redirect) on another domain.               |
+| `INVALID_SUBTITLE`          | The downloaded file is empty, too large or does not parse.                                                               |
+| `CANCELLED`                 | An explicit login overtaken by a logout or another login, a download caller whose signal aborted, or a cancelled search. |
 
 ## Known limits
 

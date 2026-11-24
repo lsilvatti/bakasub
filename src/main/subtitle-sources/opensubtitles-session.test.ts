@@ -33,6 +33,15 @@ function setup(stored: string | null = null): {
 const CREDS = JSON.stringify({ username: 'u', password: 'hunter2-long' })
 const authError = (): AppError => new AppError('OPENSUBTITLES_AUTH', 'rejected')
 
+function deferred(): {
+  promise: Promise<OpenSubtitlesAuth>
+  resolve: (a: OpenSubtitlesAuth) => void
+} {
+  let resolve!: (a: OpenSubtitlesAuth) => void
+  const promise = new Promise<OpenSubtitlesAuth>((r) => (resolve = r))
+  return { promise, resolve }
+}
+
 describe('OpenSubtitlesSession', () => {
   it('no account: calls anonymously and never logs in', async () => {
     const { session, login } = setup()
@@ -110,15 +119,6 @@ describe('OpenSubtitlesSession', () => {
   })
 
   describe('generation (logout vs login in flight)', () => {
-    function deferred(): {
-      promise: Promise<OpenSubtitlesAuth>
-      resolve: (a: OpenSubtitlesAuth) => void
-    } {
-      let resolve!: (a: OpenSubtitlesAuth) => void
-      const promise = new Promise<OpenSubtitlesAuth>((r) => (resolve = r))
-      return { promise, resolve }
-    }
-
     it('logout during a re-login does not restore the session', async () => {
       const { session, login, store } = setup(CREDS)
       const slow = deferred()
@@ -182,6 +182,37 @@ describe('OpenSubtitlesSession', () => {
       await expect(logging).rejects.toMatchObject({ code: 'CANCELLED' })
       expect(store.value).toBeNull()
       expect(await session.run(async (a) => a?.token ?? 'anonymous')).toBe('anonymous')
+    })
+  })
+
+  describe('cancellation', () => {
+    it('an aborted caller is detached from the shared re-login; the others still get the token', async () => {
+      const { session, login } = setup(CREDS)
+      const slow = deferred()
+      login.mockReturnValueOnce(slow.promise)
+      const ctrl = new AbortController()
+      const call = vi.fn(async (a?: OpenSubtitlesAuth) => a?.token)
+      const cancelled = session.run(call, ctrl.signal)
+      const other = session.run(async (a) => a?.token)
+      await vi.waitFor(() => expect(login).toHaveBeenCalledTimes(1))
+
+      ctrl.abort()
+      await expect(cancelled).rejects.toMatchObject({ code: 'CANCELLED' })
+      slow.resolve({ token: 'shared-token' })
+      expect(await other).toBe('shared-token')
+      expect(call).not.toHaveBeenCalled()
+      expect(login).toHaveBeenCalledTimes(1)
+      expect(login.mock.calls[0]).toHaveLength(2)
+    })
+
+    it('an already aborted signal neither logs in nor calls', async () => {
+      const { session, login } = setup(CREDS)
+      const call = vi.fn(async () => 'x')
+      await expect(session.run(call, AbortSignal.abort())).rejects.toMatchObject({
+        code: 'CANCELLED'
+      })
+      expect(login).not.toHaveBeenCalled()
+      expect(call).not.toHaveBeenCalled()
     })
   })
 })
