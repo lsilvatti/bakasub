@@ -336,7 +336,7 @@ const api: BakaSubApi = {
     getInfo: () =>
       ok({
         name: 'BakaSub',
-        version: '1.0.6',
+        version: '1.0.7',
         platform: 'linux',
         arch: 'x64',
         electron: '39.0.0',
@@ -344,14 +344,14 @@ const api: BakaSubApi = {
       }),
     checkUpdate: () =>
       ok({
-        current: '1.0.6',
-        latest: '1.0.6',
+        current: '1.0.7',
+        latest: '1.0.7',
         updateAvailable: false,
         publishedAt: '',
         offline: false
       }),
-    getUpdateState: () => ok({ state: 'not-available', current: '1.0.6' }),
-    downloadUpdate: () => ok({ state: 'not-available', current: '1.0.6' }),
+    getUpdateState: () => ok({ state: 'not-available', current: '1.0.7' }),
+    downloadUpdate: () => ok({ state: 'not-available', current: '1.0.7' }),
     cancelUpdateDownload: () => ok({ cancelled: false }),
     installUpdate: () => ok({ installing: true }),
     openExternal: () => ok({ opened: true })
