@@ -108,4 +108,80 @@ describe('OpenSubtitlesSession', () => {
     expect(await broken.session.username()).toBeNull()
     expect(await broken.session.run(async (a) => a ?? 'anonymous')).toBe('anonymous')
   })
+
+  describe('generation (logout vs login in flight)', () => {
+    function deferred(): {
+      promise: Promise<OpenSubtitlesAuth>
+      resolve: (a: OpenSubtitlesAuth) => void
+    } {
+      let resolve!: (a: OpenSubtitlesAuth) => void
+      const promise = new Promise<OpenSubtitlesAuth>((r) => (resolve = r))
+      return { promise, resolve }
+    }
+
+    it('logout during a re-login does not restore the session', async () => {
+      const { session, login, store } = setup(CREDS)
+      const slow = deferred()
+      login.mockReturnValueOnce(slow.promise)
+      const running = session.run(async (a) => a?.token ?? 'anonymous')
+      await vi.waitFor(() => expect(login).toHaveBeenCalledTimes(1))
+
+      await session.logout()
+      slow.resolve({ token: 'stale-token' })
+
+      expect(await running).toBe('anonymous')
+      expect(store.value).toBeNull()
+      expect(await session.run(async (a) => a?.token ?? 'anonymous')).toBe('anonymous')
+      expect(login).toHaveBeenCalledTimes(1)
+    })
+
+    it('logout during the retry re-login after a rejected token: retry runs anonymously', async () => {
+      const { session, login } = setup(CREDS)
+      await session.run(async () => undefined)
+      const slow = deferred()
+      login.mockReturnValueOnce(slow.promise)
+      const call = vi
+        .fn<(a?: OpenSubtitlesAuth) => Promise<string>>()
+        .mockRejectedValueOnce(authError())
+        .mockImplementation(async (a) => a?.token ?? 'anonymous')
+      const running = session.run(call)
+      await vi.waitFor(() => expect(login).toHaveBeenCalledTimes(2))
+
+      await session.logout()
+      slow.resolve({ token: 'stale-token' })
+
+      expect(await running).toBe('anonymous')
+      expect(await session.run(async (a) => a?.token ?? 'anonymous')).toBe('anonymous')
+    })
+
+    it('a new login during a stale re-login wins; the stale token is never used', async () => {
+      const { session, login, store } = setup(CREDS)
+      const slow = deferred()
+      login.mockReturnValueOnce(slow.promise)
+      const running = session.run(async (a) => a?.token ?? 'anonymous')
+      await vi.waitFor(() => expect(login).toHaveBeenCalledTimes(1))
+
+      login.mockResolvedValueOnce({ token: 'fresh-token' })
+      await session.login('other', 'new-password-long')
+      slow.resolve({ token: 'stale-token' })
+
+      expect(await running).toBe('fresh-token')
+      expect(await session.run(async (a) => a?.token)).toBe('fresh-token')
+      expect(JSON.parse(store.value!)).toEqual({ username: 'other', password: 'new-password-long' })
+    })
+
+    it('logout during an explicit login: rejects with CANCELLED and stores nothing', async () => {
+      const { session, login, store } = setup()
+      const slow = deferred()
+      login.mockReturnValueOnce(slow.promise)
+      const logging = session.login('u', 'hunter2-long')
+
+      await session.logout()
+      slow.resolve({ token: 'stale-token' })
+
+      await expect(logging).rejects.toMatchObject({ code: 'CANCELLED' })
+      expect(store.value).toBeNull()
+      expect(await session.run(async (a) => a?.token ?? 'anonymous')).toBe('anonymous')
+    })
+  })
 })

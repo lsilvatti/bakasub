@@ -55,6 +55,8 @@ Before saving a key, the client checks it with a search for a random query that 
 
 The account is optional and raises the daily download quota. It is stored as `opensubtitles.login`, a JSON `{ username, password }` in the vault, and saved only after OpenSubtitles accepts the login. The password has to be kept because the session token lasts about a day. The token itself is never written to disk. The API takes the user name, and an email is refused.
 
+Logout and login are ordered by a generation counter in the session. Each logout or explicit login bumps it, and every login in flight (a background re-login or another explicit login) captures it when it starts. If the generation changed before the login answers, its token is dropped: a re-login returns the current state (no token after a logout, the new token after a new login), and an explicit login rejects with `CANCELLED` without writing the vault. So a slow re-login cannot bring back a session the user already left. A call that already got its token before the logout still finishes with it.
+
 The API key, the password and every token are given to the log redactor before the first request that carries them.
 
 Every request sends `User-Agent: BakaSub v<version>`, which the API requires. It contains no user data.
@@ -90,6 +92,7 @@ The local file name is built from the id. The remote file name never reaches the
 | `OPENSUBTITLES_QUOTA`       | 406 on `/download`. The daily download quota is used up.                                                   |
 | `NETWORK`                   | Unreachable, 429 or 5xx, an unexpected response shape, or a download link (or redirect) on another domain. |
 | `INVALID_SUBTITLE`          | The downloaded file is empty, too large or does not parse.                                                 |
+| `CANCELLED`                 | An explicit login overtaken by a logout or another login before it finished.                               |
 
 ## Known limits
 
