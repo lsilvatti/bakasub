@@ -68,8 +68,20 @@ function toResult(f: OpenSubtitlesFile, hashMatch: boolean): SubtitleSearchResul
   }
 }
 
+const cancelled = (): AppError => new AppError('CANCELLED', 'Subtitle download cancelled')
+
+/** Settles with `shared`, or rejects with `CANCELLED` as soon as `signal` aborts, whichever first. */
+function detach<T>(shared: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(cancelled())
+    signal.addEventListener('abort', onAbort, { once: true })
+    shared.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort))
+  })
+}
+
 export class SubtitleSourceService {
   private readonly fetch: typeof fetch
+  private readonly inflight = new Map<number, Promise<SubtitleDownload>>()
 
   constructor(
     private readonly d: {
@@ -113,19 +125,38 @@ export class SubtitleSourceService {
     }
   }
 
-  async download(fileId: number, signal?: AbortSignal): Promise<SubtitleDownload> {
+  /**
+   * Concurrent calls for the same id share one download: one quota spend, one `.partial` writer.
+   * A caller's signal only detaches that caller (it rejects with `CANCELLED`); the shared download
+   * keeps running, bounded by its own timeout, so the others still get the file and the quota
+   * already spent ends up in the cache. The entry is dropped once it settles, success or error,
+   * so a later call after a failure starts a fresh attempt.
+   */
+  download(fileId: number, signal?: AbortSignal): Promise<SubtitleDownload> {
+    if (signal?.aborted) return Promise.reject(cancelled())
+    let shared = this.inflight.get(fileId)
+    if (!shared) {
+      const started = this.downloadToCache(fileId).finally(() => {
+        if (this.inflight.get(fileId) === started) this.inflight.delete(fileId)
+      })
+      this.inflight.set(fileId, started)
+      shared = started
+    }
+    return signal ? detach(shared, signal) : shared
+  }
+
+  private async downloadToCache(fileId: number): Promise<SubtitleDownload> {
     const name = `${fileId}.srt`
     const path = join(this.d.cacheDir, name)
     const base = { path, name, format: 'srt' as const }
     if (await this.isValid(path)) return { ...base, cached: true }
 
-    const { link, remaining, resetAt } = await this.d.session.run(
-      (auth) => this.d.client.requestDownload(fileId, auth, signal),
-      signal
+    const { link, remaining, resetAt } = await this.d.session.run((auth) =>
+      this.d.client.requestDownload(fileId, auth)
     )
     if (!isAllowedDownloadLink(link))
       throw new AppError('NETWORK', 'OpenSubtitles returned a download link outside its domain')
-    const bytes = await this.fetchFile(link, signal)
+    const bytes = await this.fetchFile(link)
 
     await mkdir(this.d.cacheDir, { recursive: true })
     const partial = `${path}.partial`
@@ -159,18 +190,13 @@ export class SubtitleSourceService {
    * Follows redirects by hand so every hop is checked against the link allowlist before any
    * request reaches it; `redirect: 'follow'` would contact the foreign host first.
    */
-  private async followRedirects(
-    link: string,
-    fetchSignal: AbortSignal,
-    signal?: AbortSignal
-  ): Promise<Response> {
+  private async followRedirects(link: string, signal: AbortSignal): Promise<Response> {
     let url = link
     for (let hop = 0; ; hop++) {
       let res: Response
       try {
-        res = await this.fetch(url, { redirect: 'manual', signal: fetchSignal })
+        res = await this.fetch(url, { redirect: 'manual', signal })
       } catch (err) {
-        if (signal?.aborted) throw new AppError('CANCELLED', 'Subtitle download cancelled')
         throw new AppError('NETWORK', 'OpenSubtitles download failed', { cause: err })
       }
       // A browser-style fetch hides the Location of a manual redirect: nothing safe to follow.
@@ -188,13 +214,9 @@ export class SubtitleSourceService {
     }
   }
 
-  private async fetchFile(link: string, signal?: AbortSignal): Promise<Buffer> {
-    const timeout = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS)
-    const res = await this.followRedirects(
-      link,
-      signal ? AbortSignal.any([signal, timeout]) : timeout,
-      signal
-    )
+  /** No caller signal on purpose: the fetch is shared (see `download`), only the timeout ends it. */
+  private async fetchFile(link: string): Promise<Buffer> {
+    const res = await this.followRedirects(link, AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS))
     if (!res.ok || !res.body) throw new AppError('NETWORK', `OpenSubtitles download ${res.status}`)
     const chunks: Uint8Array[] = []
     let size = 0
@@ -209,7 +231,6 @@ export class SubtitleSourceService {
       }
     } catch (err) {
       if (err instanceof AppError) throw err
-      if (signal?.aborted) throw new AppError('CANCELLED', 'Subtitle download cancelled')
       throw new AppError('NETWORK', 'OpenSubtitles download interrupted', { cause: err })
     }
     if (size === 0) throw new AppError('INVALID_SUBTITLE', 'Downloaded subtitle is empty')

@@ -83,6 +83,10 @@ Query parameters are sent lower-cased and sorted, because the API redirects othe
 
 The local file name is built from the id. The remote file name never reaches the file system.
 
+Concurrent calls for the same file id share one download: one `/download` request, one quota spend and one writer of the `.partial`. Every caller gets the same result (`cached: false` and the quota fields included). The shared entry is dropped as soon as it settles, success or error, so the next call after a failure is a fresh attempt.
+
+`download(fileId, signal)` takes an optional signal, and its semantics are "detach", not "abort": an aborted caller rejects at once with `CANCELLED`, while the shared download keeps running for the other callers, bounded by its own 30 s timeout. This holds even when the last caller leaves. Once `/download` has answered, the quota is already spent, so finishing the fetch puts the file in the cache and the next attempt costs nothing. A signal already aborted on entry starts nothing.
+
 ### Errors
 
 | Code                        | When                                                                                                       |
@@ -92,7 +96,7 @@ The local file name is built from the id. The remote file name never reaches the
 | `OPENSUBTITLES_QUOTA`       | 406 on `/download`. The daily download quota is used up.                                                   |
 | `NETWORK`                   | Unreachable, 429 or 5xx, an unexpected response shape, or a download link (or redirect) on another domain. |
 | `INVALID_SUBTITLE`          | The downloaded file is empty, too large or does not parse.                                                 |
-| `CANCELLED`                 | An explicit login overtaken by a logout or another login before it finished.                               |
+| `CANCELLED`                 | An explicit login overtaken by a logout or another login, or a download caller whose signal aborted.       |
 
 ## Known limits
 

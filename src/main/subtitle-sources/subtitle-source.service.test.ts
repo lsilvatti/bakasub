@@ -168,6 +168,87 @@ describe('download', () => {
   })
 })
 
+describe('concurrent downloads', () => {
+  /** Holds the fetch until `release()` so calls overlap for real. */
+  function gated(): ReturnType<typeof setup> & { release: () => void } {
+    const ctx = setup({})
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    ctx.fetch.mockImplementation(async () => {
+      await gate
+      return new Response(SRT, { status: 200 })
+    })
+    return { ...ctx, release }
+  }
+
+  it('two simultaneous calls for the same id make one request and get the same result', async () => {
+    const { service, requestDownload, fetch, release, cacheDir } = gated()
+    const a = service.download(77)
+    const b = service.download(77)
+    release()
+    const [ra, rb] = await Promise.all([a, b])
+    expect(ra).toEqual(rb)
+    expect(ra).toMatchObject({ cached: false, remaining: 9 })
+    expect(requestDownload).toHaveBeenCalledTimes(1)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(readdirSync(cacheDir)).toEqual(['77.srt'])
+  })
+
+  it('different ids are not joined', async () => {
+    const { service, requestDownload, release } = gated()
+    const both = Promise.all([service.download(1), service.download(2)])
+    release()
+    await both
+    expect(requestDownload).toHaveBeenCalledTimes(2)
+  })
+
+  it('after a failure the entry is dropped and a new attempt downloads again', async () => {
+    const { service, requestDownload, fetch, cacheDir } = setup({})
+    fetch.mockResolvedValueOnce(new Response('', { status: 503 }))
+    const failed = [service.download(5), service.download(5)]
+    await expect(failed[0]).rejects.toMatchObject({ code: 'NETWORK' })
+    await expect(failed[1]).rejects.toMatchObject({ code: 'NETWORK' })
+    expect(requestDownload).toHaveBeenCalledTimes(1)
+
+    await expect(service.download(5)).resolves.toMatchObject({ cached: false })
+    expect(requestDownload).toHaveBeenCalledTimes(2)
+    expect(readdirSync(cacheDir)).toEqual(['5.srt'])
+  })
+
+  it('a cancelled caller is detached; the shared download finishes for the others', async () => {
+    const { service, requestDownload, release, cacheDir } = gated()
+    const ctrl = new AbortController()
+    const cancelledCall = service.download(77, ctrl.signal)
+    const other = service.download(77)
+    ctrl.abort()
+    await expect(cancelledCall).rejects.toMatchObject({ code: 'CANCELLED' })
+    release()
+    await expect(other).resolves.toMatchObject({ cached: false })
+    expect(requestDownload).toHaveBeenCalledTimes(1)
+    expect(readdirSync(cacheDir)).toEqual(['77.srt'])
+  })
+
+  it('when the only caller cancels, the download still lands in the cache (quota not wasted)', async () => {
+    const { service, requestDownload, release, cacheDir } = gated()
+    const ctrl = new AbortController()
+    const call = service.download(77, ctrl.signal)
+    ctrl.abort()
+    await expect(call).rejects.toMatchObject({ code: 'CANCELLED' })
+    release()
+    await vi.waitFor(() => expect(readdirSync(cacheDir)).toEqual(['77.srt']))
+    await expect(service.download(77)).resolves.toMatchObject({ cached: true })
+    expect(requestDownload).toHaveBeenCalledTimes(1)
+  })
+
+  it('an already aborted signal starts nothing', async () => {
+    const { service, requestDownload } = setup({})
+    await expect(service.download(77, AbortSignal.abort())).rejects.toMatchObject({
+      code: 'CANCELLED'
+    })
+    expect(requestDownload).not.toHaveBeenCalled()
+  })
+})
+
 describe('download redirects', () => {
   const redirect = (location: string, status = 302): Response =>
     new Response(null, { status, headers: { location } })
