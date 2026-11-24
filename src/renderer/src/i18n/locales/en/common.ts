@@ -918,6 +918,9 @@ export const common = {
       opensubtitlesAccount: 'Account (optional)',
       opensubtitlesAccountHint:
         'Signing in raises the daily download limit. The password is stored encrypted on this computer.',
+      opensubtitlesAccountHintNoKeyring: 'Signing in raises the daily download limit.',
+      opensubtitlesNoKeyring:
+        'Your system has no keyring, so the password is stored without system protection. Anyone with access to your user account could read it.',
       username: 'Username',
       usernameHint: 'Your OpenSubtitles username, not your email.',
       password: 'Password',

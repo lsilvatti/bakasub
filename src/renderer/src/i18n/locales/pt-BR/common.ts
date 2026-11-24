@@ -931,6 +931,9 @@ export const common: LocaleShape<typeof en> = {
       opensubtitlesAccount: 'Conta (opcional)',
       opensubtitlesAccountHint:
         'Entrar na conta aumenta o limite diário de downloads. A senha fica guardada criptografada neste computador.',
+      opensubtitlesAccountHintNoKeyring: 'Entrar na conta aumenta o limite diário de downloads.',
+      opensubtitlesNoKeyring:
+        'Seu sistema não tem chaveiro, então a senha fica salva sem proteção do sistema. Quem tiver acesso à sua conta de usuário pode lê-la.',
       username: 'Usuário',
       usernameHint: 'Seu nome de usuário do OpenSubtitles, não o e-mail.',
       password: 'Senha',

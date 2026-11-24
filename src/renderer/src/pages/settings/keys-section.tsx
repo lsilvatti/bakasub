@@ -67,7 +67,12 @@ export function KeysSection(): React.JSX.Element {
           onSave={(key) => setOs.mutateAsync(key)}
           onRemove={() => setOs.mutate(null)}
         />
-        {os.data?.keyPresent ? <OpenSubtitlesAccount username={os.data.username} /> : null}
+        {os.data?.keyPresent ? (
+          <OpenSubtitlesAccount
+            username={os.data.username}
+            noKeyring={or.data?.protection === 'none'}
+          />
+        ) : null}
       </section>
     </div>
   )
