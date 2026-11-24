@@ -18,7 +18,32 @@ const targets = [
   { id: 'windows', href: release.windows, label: t('download.windows') },
   { id: 'linux', href: release.linux, label: t('download.linux') }
 ]
+// The latest release lists every published asset (and, once it ships, the Docker image).
+const otherVersions = `${links.releases}/latest`
 ---
+
+{/*
+  OS detection, client side (the site is static). Runs synchronously while the body is parsed, before the
+  buttons below exist, so `html[data-os]` is set before their first paint: no flash, no layout shift.
+  - `windows` / `linux`: only the matching button, plus "Other versions".
+  - `mobile` (Android, iOS, iPadOS): no download button, "Other versions" plus a desktop-only notice.
+  - unset (no JS, macOS, ChromeOS, BSD, unknown): both buttons, exactly the server-rendered state.
+  Android is checked before Linux because its user agent contains "Linux"; iPadOS reports itself as a Mac,
+  so a Mac with a touch screen counts as mobile.
+*/}
+<script is:inline>
+  ;(() => {
+    const nav = navigator
+    const hint = (nav.userAgentData?.platform || '').toLowerCase()
+    const ua = (nav.userAgent || '').toLowerCase()
+    const has = (needle) => hint.includes(needle) || (!hint && ua.includes(needle))
+    let os = ''
+    if (has('android') || /iphone|ipad|ipod/.test(ua) || (has('mac') && nav.maxTouchPoints > 1)) os = 'mobile'
+    else if (has('win')) os = 'windows'
+    else if (has('linux') && !ua.includes('cros')) os = 'linux'
+    if (os) document.documentElement.dataset.os = os
+  })()
+</script>
 
 <div id="download" class="mt-9 flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center">
   {
@@ -31,11 +56,34 @@ const targets = [
       </a>
     ))
   }
+  <a href={otherVersions} class={secondary} data-download-others>
+    {t('download.others')}
+  </a>
   <a href={links.repo} class={secondary}>
     <GitHubIcon class="size-4" />
     {t('hero.source')}
   </a>
 </div>
+<p class="mt-4 text-sm text-pretty text-muted-foreground" data-download-mobile>{t('download.mobile')}</p>
 <p class="mt-4 font-mono text-xs text-muted-foreground">
   {release.version ? `${format(t('download.version'), { version: release.version })} · ` : ''}{t('hero.platforms')}
 </p>
+
+<style is:global>
+  /* Server-rendered state (no detection): both downloads, no "Other versions", no mobile notice. */
+  [data-download-others],
+  [data-download-mobile] {
+    display: none;
+  }
+  html[data-os] [data-download-others] {
+    display: inline-flex;
+  }
+  html[data-os='mobile'] [data-download-mobile] {
+    display: block;
+  }
+  html[data-os='windows'] [data-platform='linux'],
+  html[data-os='linux'] [data-platform='windows'],
+  html[data-os='mobile'] [data-platform] {
+    display: none;
+  }
+</style>

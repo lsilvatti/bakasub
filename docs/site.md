@@ -113,6 +113,19 @@ Any failure (API down, rate limit, no release, a missing asset) logs a `[release
 
 The version is baked in at build time, which is why a release triggers a deploy (below).
 
+### One button per OS
+
+The page is static, so the visitor's OS is detected in the browser by an inline script in `DownloadButtons.astro` (`navigator.userAgentData.platform`, falling back to `navigator.userAgent`). It runs while the body is parsed, before the buttons exist, and only sets `html[data-os]`; a global `<style>` in the same component does the hiding, so there is no flash or layout shift.
+
+| `data-os` | Detected from                                   | Shown                                                     |
+| --------- | ----------------------------------------------- | --------------------------------------------------------- |
+| `windows` | Windows                                         | Windows button, **Other versions**                        |
+| `linux`   | Linux (not Android, not ChromeOS)               | AppImage button, **Other versions**                       |
+| `mobile`  | Android, iPhone/iPad, a Mac with a touch screen | **Other versions** and a desktop-only notice, no download |
+| unset     | no JS, macOS, ChromeOS, BSD, anything else      | Both buttons, the server-rendered state                   |
+
+**Other versions** points to `releases/latest` on GitHub, which lists every asset (and the Docker image once it ships). `id="download"`, `data-platform` and the version line are unchanged. Strings: `download.others`, `download.mobile`.
+
 ## Deploy
 
 `.github/workflows/site.yml` builds `site/` and publishes `site/dist` to GitHub Pages (`configure-pages`, `upload-pages-artifact`, `deploy-pages`).

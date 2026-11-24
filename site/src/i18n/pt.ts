@@ -22,6 +22,8 @@ export const pt = {
     'Um app desktop que roda na sua própria máquina. Use sua chave do OpenRouter; seus arquivos nunca saem do seu computador.',
   'download.windows': 'Baixar para Windows (.exe)',
   'download.linux': 'Baixar para Linux (.AppImage)',
+  'download.others': 'Outras versões',
+  'download.mobile': 'O BakaSub é um app desktop para Windows e Linux: abra esta página no computador para baixá-lo.',
   'download.version': 'Versão {version}',
   'hero.source': 'Ver código-fonte',
   'hero.platforms': 'Windows x64 · Linux x64 · Software livre e de código aberto',
