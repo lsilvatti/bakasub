@@ -15,6 +15,8 @@ import type { OpenSubtitlesClient, OpenSubtitlesFile } from './opensubtitles-cli
 import type { OpenSubtitlesSession } from './opensubtitles-session'
 
 const DOWNLOAD_TIMEOUT_MS = 30_000
+const MAX_REDIRECTS = 3
+const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308])
 const MAX_RESULTS = 60
 const LINK_HOST = /(^|\.)opensubtitles\.(com|org)$/
 
@@ -29,6 +31,15 @@ export function isAllowedDownloadLink(raw: string): boolean {
     )
   } catch {
     return false
+  }
+}
+
+function resolveLocation(location: string | null, base: string): string | null {
+  if (!location) return null
+  try {
+    return new URL(location, base).toString()
+  } catch {
+    return null
   }
 }
 
@@ -144,17 +155,46 @@ export class SubtitleSourceService {
     }
   }
 
+  /**
+   * Follows redirects by hand so every hop is checked against the link allowlist before any
+   * request reaches it; `redirect: 'follow'` would contact the foreign host first.
+   */
+  private async followRedirects(
+    link: string,
+    fetchSignal: AbortSignal,
+    signal?: AbortSignal
+  ): Promise<Response> {
+    let url = link
+    for (let hop = 0; ; hop++) {
+      let res: Response
+      try {
+        res = await this.fetch(url, { redirect: 'manual', signal: fetchSignal })
+      } catch (err) {
+        if (signal?.aborted) throw new AppError('CANCELLED', 'Subtitle download cancelled')
+        throw new AppError('NETWORK', 'OpenSubtitles download failed', { cause: err })
+      }
+      // A browser-style fetch hides the Location of a manual redirect: nothing safe to follow.
+      if (res.type === 'opaqueredirect')
+        throw new AppError('NETWORK', 'OpenSubtitles download redirect could not be verified')
+      if (!REDIRECT_STATUS.has(res.status)) return res
+
+      await res.body?.cancel().catch(() => undefined)
+      if (hop >= MAX_REDIRECTS)
+        throw new AppError('NETWORK', 'OpenSubtitles download: too many redirects')
+      const next = resolveLocation(res.headers.get('location'), url)
+      if (!next || !isAllowedDownloadLink(next))
+        throw new AppError('NETWORK', 'OpenSubtitles download redirected outside its domain')
+      url = next
+    }
+  }
+
   private async fetchFile(link: string, signal?: AbortSignal): Promise<Buffer> {
     const timeout = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS)
-    let res: Response
-    try {
-      res = await this.fetch(link, {
-        signal: signal ? AbortSignal.any([signal, timeout]) : timeout
-      })
-    } catch (err) {
-      if (signal?.aborted) throw new AppError('CANCELLED', 'Subtitle download cancelled')
-      throw new AppError('NETWORK', 'OpenSubtitles download failed', { cause: err })
-    }
+    const res = await this.followRedirects(
+      link,
+      signal ? AbortSignal.any([signal, timeout]) : timeout,
+      signal
+    )
     if (!res.ok || !res.body) throw new AppError('NETWORK', `OpenSubtitles download ${res.status}`)
     const chunks: Uint8Array[] = []
     let size = 0

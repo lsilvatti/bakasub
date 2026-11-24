@@ -168,6 +168,79 @@ describe('download', () => {
   })
 })
 
+describe('download redirects', () => {
+  const redirect = (location: string, status = 302): Response =>
+    new Response(null, { status, headers: { location } })
+
+  function withFetch(responses: (url: string) => Response): ReturnType<typeof setup> {
+    const ctx = setup({})
+    ctx.fetch.mockImplementation(async (url: string) => responses(String(url)))
+    return ctx
+  }
+
+  it('follows a redirect to an allowed host, checking every hop by hand', async () => {
+    const { service, fetch, cacheDir } = withFetch((url) =>
+      url === LINK
+        ? redirect('https://dl.opensubtitles.org/file/77.srt')
+        : new Response(SRT, { status: 200 })
+    )
+    await expect(service.download(77)).resolves.toMatchObject({ cached: false })
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(fetch.mock.calls.map((c) => c[1]?.redirect)).toEqual(['manual', 'manual'])
+    expect(fetch.mock.calls[1][0]).toBe('https://dl.opensubtitles.org/file/77.srt')
+    expect(readdirSync(cacheDir)).toEqual(['77.srt'])
+  })
+
+  it('resolves a relative Location against the current hop', async () => {
+    const { service, fetch } = withFetch((url) =>
+      url === LINK ? redirect('/other/77.srt', 301) : new Response(SRT, { status: 200 })
+    )
+    await service.download(77)
+    expect(fetch.mock.calls[1][0]).toBe('https://www.opensubtitles.com/other/77.srt')
+  })
+
+  it.each([
+    ['a foreign host', 'https://evil.example/file.srt'],
+    ['plain HTTP', 'http://dl.opensubtitles.org/file.srt'],
+    ['a look-alike host', 'https://opensubtitles.com.evil.example/x']
+  ])(
+    'a redirect to %s is rejected before any request reaches it, nothing is written',
+    async (_, target) => {
+      const { service, fetch, cacheDir } = withFetch(() => redirect(target))
+      await expect(service.download(9)).rejects.toMatchObject({ code: 'NETWORK' })
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(existsSync(cacheDir)).toBe(false)
+    }
+  )
+
+  it('a redirect without Location fails', async () => {
+    const { service } = withFetch(() => new Response(null, { status: 307 }))
+    await expect(service.download(9)).rejects.toMatchObject({ code: 'NETWORK' })
+  })
+
+  it('more than 3 redirects fail, even inside the allowed domain', async () => {
+    let n = 0
+    const { service, fetch, cacheDir } = withFetch(() =>
+      redirect(`https://dl.opensubtitles.org/hop/${++n}`)
+    )
+    await expect(service.download(9)).rejects.toMatchObject({
+      code: 'NETWORK',
+      message: expect.stringContaining('too many redirects')
+    })
+    expect(fetch).toHaveBeenCalledTimes(4)
+    expect(existsSync(cacheDir)).toBe(false)
+  })
+
+  it('3 redirects are still followed', async () => {
+    let n = 0
+    const { service, fetch } = withFetch(() =>
+      n < 3 ? redirect(`https://dl.opensubtitles.org/hop/${++n}`) : new Response(SRT)
+    )
+    await expect(service.download(9)).resolves.toMatchObject({ cached: false })
+    expect(fetch).toHaveBeenCalledTimes(4)
+  })
+})
+
 describe('isAllowedDownloadLink', () => {
   it('HTTPS only, no credentials, on opensubtitles.com/.org and subdomains', () => {
     expect(isAllowedDownloadLink('https://www.opensubtitles.com/download/x')).toBe(true)

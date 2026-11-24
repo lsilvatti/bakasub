@@ -76,20 +76,20 @@ Query parameters are sent lower-cased and sorted, because the API redirects othe
 
 1. If `cache/opensubtitles/<fileId>.srt` exists and still parses, it returns that file. No request is made and no quota is spent.
 2. It asks the API for a temporary link, always converted to SRT.
-3. It fetches the link only if it is HTTPS on `opensubtitles.com` or `opensubtitles.org`, or one of their subdomains. The 50 MB cap applies while the body streams in.
+3. It fetches the link only if it is HTTPS on `opensubtitles.com` or `opensubtitles.org`, or one of their subdomains. Redirects are followed by hand (`redirect: 'manual'`): each `Location` is checked against the same rule before it is requested, so a hop to another host is refused without contacting it. More than 3 redirects fail. The 50 MB cap applies while the body streams in.
 4. It writes the body to `.partial` and parses it with the SRT parser. The file is renamed into the cache only if it parses.
 
 The local file name is built from the id. The remote file name never reaches the file system.
 
 ### Errors
 
-| Code                        | When                                                                                         |
-| --------------------------- | -------------------------------------------------------------------------------------------- |
-| `OPENSUBTITLES_KEY_MISSING` | The vault has no API key. No request is made.                                                |
-| `OPENSUBTITLES_AUTH`        | 401 or 403, after one re-login. Also 400 on `/login`, for a wrong user name or password.     |
-| `OPENSUBTITLES_QUOTA`       | 406 on `/download`. The daily download quota is used up.                                     |
-| `NETWORK`                   | Unreachable, 429 or 5xx, an unexpected response shape, or a download link on another domain. |
-| `INVALID_SUBTITLE`          | The downloaded file is empty, too large or does not parse.                                   |
+| Code                        | When                                                                                                       |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `OPENSUBTITLES_KEY_MISSING` | The vault has no API key. No request is made.                                                              |
+| `OPENSUBTITLES_AUTH`        | 401 or 403, after one re-login. Also 400 on `/login`, for a wrong user name or password.                   |
+| `OPENSUBTITLES_QUOTA`       | 406 on `/download`. The daily download quota is used up.                                                   |
+| `NETWORK`                   | Unreachable, 429 or 5xx, an unexpected response shape, or a download link (or redirect) on another domain. |
+| `INVALID_SUBTITLE`          | The downloaded file is empty, too large or does not parse.                                                 |
 
 ## Known limits
 
