@@ -12,6 +12,7 @@ import type {
   PreflightEstimate,
   Preset,
   SubtitleSearchRequest,
+  SubtitleSearchResult,
   SubtitleTrackInfo
 } from '@shared/ipc-contract'
 import { App } from '@renderer/app/app'
@@ -117,7 +118,8 @@ const animeMedia = {
 function setup(
   path: string,
   tracks?: SubtitleTrackInfo[],
-  media?: typeof animeMedia
+  media?: typeof animeMedia,
+  opensubtitles?: { result?: Partial<SubtitleSearchResult>; videoFps?: number }
 ): {
   fake: FakeApi
   create: ReturnType<typeof vi.fn>
@@ -163,7 +165,8 @@ function setup(
           hashMatch: true,
           hearingImpaired: false,
           machineTranslated: false,
-          trusted: false
+          trusted: false,
+          ...opensubtitles?.result
         }
       ]
     })
@@ -237,6 +240,7 @@ function setup(
       probe: () =>
         ok({
           attachments: 2,
+          ...(opensubtitles?.videoFps !== undefined ? { videoFps: opensubtitles.videoFps } : {}),
           subtitles: tracks ?? [
             {
               id: 1,
@@ -658,6 +662,55 @@ describe('a video with no subtitle to translate', () => {
       },
       confirmBeforeTranslate: true
     })
+  })
+
+  it('warns before translating when the OpenSubtitles pick may be out of sync (never blocks)', async () => {
+    const { create } = setup('/videos/Show.S01E01.mkv', pgsOnly, undefined, {
+      result: { hashMatch: false, fps: 25 },
+      videoFps: 23.976
+    })
+    await toTrackStep()
+    await userEvent.click(screen.getByRole('button', { name: 'Search OpenSubtitles' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByText('25 fps ≠ video 23.976 fps')).toBeTruthy()
+    expect(within(dialog).getByText('Not verified for this file')).toBeTruthy()
+    expect(within(dialog).queryByText('Made for this file')).toBeNull()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Use Show.S01E01.WEB' }))
+    expect(
+      await screen.findByText(/timed for 25 fps, but the video runs at 23\.976 fps/)
+    ).toBeTruthy()
+    expect(
+      screen.getByText(/could not confirm this subtitle was made for this exact file/)
+    ).toBeTruthy()
+    // Summary row of the track step carries the short warning.
+    expect(
+      within(screen.getByRole('complementary', { name: 'Summary' })).getByText(
+        '25 fps ≠ video 23.976 fps · Not verified for this file'
+      )
+    ).toBeTruthy()
+
+    await next()
+    await next()
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate cost' }))
+    expect(create).toHaveBeenCalled()
+    // Preflight review repeats the notice.
+    expect(
+      await screen.findByText(/timed for 25 fps, but the video runs at 23\.976 fps/)
+    ).toBeTruthy()
+  })
+
+  it('hash match without a video frame rate: no sync warning', async () => {
+    setup('/videos/Show.S01E01.mkv', pgsOnly, undefined, { result: { fps: 25 } })
+    await toTrackStep()
+    await userEvent.click(screen.getByRole('button', { name: 'Search OpenSubtitles' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByText('Made for this file')).toBeTruthy()
+    expect(within(dialog).queryByText(/fps ≠ video/)).toBeNull()
+    expect(within(dialog).queryByText('Not verified for this file')).toBeNull()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Use Show.S01E01.WEB' }))
+    await screen.findAllByText(/Show\.S01E01\.WEB/)
+    expect(screen.queryByText(/out of sync/)).toBeNull()
   })
 
   it('a video with tracks still offers another subtitle, and picking one drops the track', async () => {

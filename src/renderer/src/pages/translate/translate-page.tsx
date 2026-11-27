@@ -10,6 +10,7 @@ import {
   ExternalSubtitle,
   type ExternalSubtitleValue
 } from '@renderer/components/media/external-subtitle'
+import { SyncWarning } from '@renderer/components/media/sync-warning'
 import { MediaPanel } from '@renderer/components/media/media-panel'
 import { TrackPicker } from '@renderer/components/media/track-picker'
 import { Button } from '@renderer/components/ui/button'
@@ -26,6 +27,7 @@ import { outputFolder, translateOutputNames } from '@renderer/lib/output-names'
 import { usePageReducer, usePageState } from '@renderer/lib/page-state'
 import { presetLabel } from '@renderer/lib/preset-labels'
 import { suggestPreset } from '@renderer/lib/preset-suggestion'
+import { syncCheck, useSyncMessages } from '@renderer/lib/sync-check'
 import { MemoryOption } from '@renderer/components/jobs/memory-option'
 import { OutputStep } from './output-step'
 import { PresetStep } from './preset-step'
@@ -83,6 +85,9 @@ export function TranslatePage({
   const probe = useProbe(video).data
   const track = probe?.subtitles.find((tr) => tr.id === state.trackId)
   const noUsableTrack = !!probe && !probe.subtitles.some((tr) => tr.format !== null)
+  // OpenSubtitles pick: possible desync, flagged before the paid translation (never blocks).
+  const sync = syncCheck(state.subtitle?.match, probe?.videoFps)
+  const syncMessages = useSyncMessages()
   const lookup = useMediaLookup(state.media.ref, null).data
   const work = lookup && state.media.ref && lookup.details.id === state.media.ref.id ? lookup : null
   // The details only reach the AI (and the backdrop) when included; the preset suggestion
@@ -159,6 +164,7 @@ export function TranslatePage({
           <section className="mx-auto w-full max-w-3xl rounded-xl border bg-card/92 p-5">
             <JobDetail
               id={jobId}
+              preflightNotice={sync ? <SyncWarning check={sync} /> : undefined}
               showQueueLink
               inspectPath={state.file?.kind === 'subtitle' ? state.file.path : undefined}
               onAnother={() => {
@@ -225,6 +231,7 @@ export function TranslatePage({
                       {probe ? (
                         <ExternalSubtitle
                           videoPath={state.file.path}
+                          videoFps={probe.videoFps}
                           value={state.subtitle}
                           onChange={onSubtitle}
                           prominent={noUsableTrack}
@@ -313,6 +320,7 @@ export function TranslatePage({
                 model={model}
                 targetLang={targetLang}
                 track={track}
+                syncWarn={sync ? syncMessages(sync, 'short').join(' · ') : undefined}
                 media={chosen}
                 existing={existing}
                 outputNames={outputNames}

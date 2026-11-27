@@ -844,6 +844,18 @@ export const common: LocaleShape<typeof en> = {
       'As legendas marcadas com "Feita para este arquivo" batem com este vídeo exato. As outras podem estar fora de sincronia; o BakaSub não ajusta o tempo.',
     quotaNote:
       'Os downloads têm limite diário. Conecte sua conta do OpenSubtitles em Configurações para um limite maior.',
+    sync: {
+      short: {
+        'fps-mismatch': '{{subtitle}} fps ≠ vídeo {{video}} fps',
+        'no-hash-match': 'Não verificada para este arquivo'
+      },
+      long: {
+        'fps-mismatch':
+          'Esta legenda foi sincronizada para {{subtitle}} fps, mas o vídeo roda a {{video}} fps: as falas vão se desencontrar, e a tradução não corrige isso.',
+        'no-hash-match':
+          'O OpenSubtitles não confirmou que esta legenda foi feita para este arquivo exato, então ela pode estar dessincronizada. Confira antes de pagar pela tradução.'
+      }
+    },
     remaining_one: 'Resta {{count}} download do OpenSubtitles hoje',
     remaining_other: 'Restam {{count}} downloads do OpenSubtitles hoje'
   },

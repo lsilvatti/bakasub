@@ -15,7 +15,8 @@ export function PreflightReview({
   estimate: e,
   coverage,
   inspectPath,
-  prompt
+  prompt,
+  notice
 }: {
   estimate: PreflightEstimate
   coverage: CoverageReport
@@ -23,6 +24,8 @@ export function PreflightReview({
   prompt?: Prompt | null
   /** Subtitle file to check for encoding and parser warnings (not available for videos). */
   inspectPath?: string
+  /** Non-blocking notice from the wizard, shown above the numbers. */
+  notice?: React.ReactNode
 }): React.JSX.Element {
   const { t, i18n } = useTranslation()
   const n = (v: number): string => formatInt(v, i18n.language)
@@ -32,6 +35,7 @@ export function PreflightReview({
 
   return (
     <div className="grid gap-4">
+      {notice}
       {e.lines.toTranslate === 0 ? (
         <p className="flex items-center gap-2 text-sm text-success">
           <Info className="size-4" />

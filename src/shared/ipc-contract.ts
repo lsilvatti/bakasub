@@ -712,6 +712,8 @@ export interface SubtitleTrackInfo {
 export interface MediaProbe {
   subtitles: SubtitleTrackInfo[]
   attachments: number
+  /** fps da primeira faixa de vídeo; ausente quando o container não informa. */
+  videoFps?: number
 }
 
 export interface ModelSummary {

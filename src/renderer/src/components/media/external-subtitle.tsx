@@ -9,29 +9,36 @@ import { errorMessage } from '@renderer/i18n/error-message'
 import { languageName } from '@renderer/lib/languages'
 import { cn } from '@renderer/lib/utils'
 import { OpenSubtitlesSearch } from './opensubtitles-search'
+import { syncCheck, type SubtitleMatch } from '@renderer/lib/sync-check'
+import { SyncWarning } from './sync-warning'
 
 export interface ExternalSubtitleValue {
   path: string
   name: string
   origin: 'file' | 'opensubtitles'
   language?: string
+  /** OpenSubtitles only: hash match and declared fps, for the sync warning. */
+  match?: SubtitleMatch
 }
 
 const baseName = (path: string): string => path.split(/[\\/]/).pop() ?? path
 
 export function ExternalSubtitle({
   videoPath,
+  videoFps,
   value,
   onChange,
   prominent
 }: {
   videoPath: string
+  videoFps?: number
   value: ExternalSubtitleValue | null
   onChange: (value: ExternalSubtitleValue | null) => void
   prominent: boolean
 }): React.JSX.Element {
   const { t, i18n } = useTranslation()
   const [searching, setSearching] = useState(false)
+  const check = syncCheck(value?.match, videoFps)
 
   const browse = (): void => {
     pickFile('subtitle').then(
@@ -68,7 +75,9 @@ export function ExternalSubtitle({
             <X />
           </Button>
         </div>
-      ) : (
+      ) : null}
+      {value && check ? <SyncWarning check={check} /> : null}
+      {value ? null : (
         <div className="grid gap-1">
           <p className={cn('text-sm font-medium', prominent && 'text-warning')}>
             {prominent ? t('translate.track.none') : t('translate.external.other')}
@@ -90,6 +99,7 @@ export function ExternalSubtitle({
       </div>
       <OpenSubtitlesSearch
         videoPath={videoPath}
+        videoFps={videoFps}
         open={searching}
         onOpenChange={setSearching}
         onPick={(s) => onChange({ ...s, origin: 'opensubtitles' })}

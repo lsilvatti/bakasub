@@ -7,7 +7,12 @@ import { toBcp47 } from './languages'
 const IDENTIFY = {
   container: { recognized: true, supported: true, type: 'Matroska' },
   tracks: [
-    { id: 0, type: 'video', codec: 'AVC', properties: { codec_id: 'V_MPEG4/ISO/AVC' } },
+    {
+      id: 0,
+      type: 'video',
+      codec: 'AVC',
+      properties: { codec_id: 'V_MPEG4/ISO/AVC', default_duration: 41708333 }
+    },
     {
       id: 1,
       type: 'audio',
@@ -93,6 +98,16 @@ describe('parseIdentify', () => {
   })
   it('anexos contados (fontes do ASS)', () => {
     expect(info.attachments).toBe(1)
+  })
+  it('fps do vídeo vem do default_duration da primeira faixa de vídeo', () => {
+    expect(info.videoFps).toBe(23.976)
+    const pal = { tracks: [{ id: 0, type: 'video', properties: { default_duration: 40000000 } }] }
+    expect(parseIdentify(pal).videoFps).toBe(25)
+  })
+  it('sem default_duration (ou inválido) não inventa fps', () => {
+    expect(parseIdentify({ tracks: [{ id: 0, type: 'video' }] })).not.toHaveProperty('videoFps')
+    const zero = { tracks: [{ id: 0, type: 'video', properties: { default_duration: 0 } }] }
+    expect(parseIdentify(zero)).not.toHaveProperty('videoFps')
   })
   it('container não reconhecido lança', () => {
     expect(() => parseIdentify({ container: { recognized: false }, tracks: [] })).toThrow()

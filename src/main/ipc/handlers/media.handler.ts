@@ -40,7 +40,11 @@ export function registerMediaHandlers(deps: {
     handle: async ({ path }) => {
       const file = await validateInputFile(path, MEDIA_EXTENSIONS)
       const info = await deps.mkv.probe(file.path)
-      return { subtitles: [...info.subtitles], attachments: info.attachments }
+      return {
+        subtitles: [...info.subtitles],
+        attachments: info.attachments,
+        ...(info.videoFps !== undefined ? { videoFps: info.videoFps } : {})
+      }
     }
   })
 

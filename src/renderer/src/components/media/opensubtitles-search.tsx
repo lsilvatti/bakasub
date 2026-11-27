@@ -18,11 +18,13 @@ import { useSubtitleDownload, useSubtitleSearch } from '@renderer/data/subtitles
 import { errorMessage } from '@renderer/i18n/error-message'
 import { languageName } from '@renderer/lib/languages'
 import { cn } from '@renderer/lib/utils'
+import { syncCheck, useSyncMessages, type SubtitleMatch } from '@renderer/lib/sync-check'
 
 export interface PickedDownload {
   path: string
   name: string
   language?: string
+  match: SubtitleMatch
 }
 
 const toNumber = (s: string): number | undefined => {
@@ -32,11 +34,14 @@ const toNumber = (s: string): number | undefined => {
 
 export function OpenSubtitlesSearch({
   videoPath,
+  videoFps,
   open,
   onOpenChange,
   onPick
 }: {
   videoPath: string
+  /** fps of the video (probe), to flag results timed for another frame rate. */
+  videoFps?: number
   open: boolean
   onOpenChange: (open: boolean) => void
   onPick: (subtitle: PickedDownload) => void
@@ -51,6 +56,7 @@ export function OpenSubtitlesSearch({
       >
         <KeyGate
           videoPath={videoPath}
+          videoFps={videoFps}
           onPick={(s) => {
             onPick(s)
             onOpenChange(false)
@@ -63,9 +69,11 @@ export function OpenSubtitlesSearch({
 
 function KeyGate({
   videoPath,
+  videoFps,
   onPick
 }: {
   videoPath: string
+  videoFps?: number
   onPick: (subtitle: PickedDownload) => void
 }): React.JSX.Element | null {
   const { t } = useTranslation()
@@ -84,6 +92,7 @@ function KeyGate({
       <SearchBody
         key={videoPath}
         videoPath={videoPath}
+        videoFps={videoFps}
         loggedIn={!!status.data.username}
         onPick={onPick}
       />
@@ -105,10 +114,12 @@ function KeyGate({
 
 function SearchBody({
   videoPath,
+  videoFps,
   loggedIn,
   onPick
 }: {
   videoPath: string
+  videoFps?: number
   loggedIn: boolean
   onPick: (subtitle: PickedDownload) => void
 }): React.JSX.Element {
@@ -123,6 +134,7 @@ function SearchBody({
   const [request, setRequest] = useState<SubtitleSearchRequest | null>(null)
   const search = useSubtitleSearch(request ?? { videoPath, languages: known })
   const download = useSubtitleDownload()
+  const syncMessages = useSyncMessages()
 
   const shown = {
     query: query ?? search.data?.query ?? '',
@@ -151,7 +163,12 @@ function SearchBody({
       onSuccess: (d) => {
         if (d.remaining !== undefined)
           toast.info(t('opensubtitles.remaining', { count: d.remaining }))
-        onPick({ path: d.path, name: r.release, ...(r.language ? { language: r.language } : {}) })
+        onPick({
+          path: d.path,
+          name: r.release,
+          ...(r.language ? { language: r.language } : {}),
+          match: { hashMatch: r.hashMatch, ...(r.fps !== undefined ? { fps: r.fps } : {}) }
+        })
       },
       onError: (err) => toast.error(errorMessage(err))
     })
@@ -231,45 +248,61 @@ function SearchBody({
         <p className="text-sm text-muted-foreground">{t('opensubtitles.noResults')}</p>
       ) : (
         <ul className="grid max-h-[45vh] gap-1.5 overflow-y-auto pr-1">
-          {results.map((r) => (
-            <li
-              key={r.fileId}
-              className="flex items-center gap-3 rounded-lg border bg-background/40 px-3 py-2"
-            >
-              <div className="grid min-w-0 flex-1 gap-1">
-                <span className="truncate text-sm font-medium" title={r.release}>
-                  {r.release}
-                </span>
-                <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                  <span>{r.language ? languageName(r.language, i18n.language) : '—'}</span>
-                  <span>{t('opensubtitles.downloads', { count: r.downloads })}</span>
-                  {r.hashMatch ? (
-                    <Badge tone="success">{t('opensubtitles.badge.hashMatch')}</Badge>
-                  ) : null}
-                  {r.trusted ? (
-                    <Badge tone="primary">{t('opensubtitles.badge.trusted')}</Badge>
-                  ) : null}
-                  {r.hearingImpaired ? (
-                    <Badge>{t('opensubtitles.badge.hearingImpaired')}</Badge>
-                  ) : null}
-                  {r.machineTranslated ? (
-                    <Badge tone="warning">{t('opensubtitles.badge.machine')}</Badge>
-                  ) : null}
-                </span>
-              </div>
-              <Button
-                size="sm"
-                disabled={download.isPending}
-                onClick={() => pick(r)}
-                aria-label={t('opensubtitles.useNamed', { name: r.release })}
+          {results.map((r) => {
+            const check = syncCheck(
+              { hashMatch: r.hashMatch, ...(r.fps !== undefined ? { fps: r.fps } : {}) },
+              videoFps
+            )
+            const short = check ? syncMessages(check, 'short') : []
+            return (
+              <li
+                key={r.fileId}
+                className="flex items-center gap-3 rounded-lg border bg-background/40 px-3 py-2"
               >
-                <Download />
-                {download.isPending && download.variables === r.fileId
-                  ? t('opensubtitles.downloading')
-                  : t('opensubtitles.use')}
-              </Button>
-            </li>
-          ))}
+                <div className="grid min-w-0 flex-1 gap-1">
+                  <span className="truncate text-sm font-medium" title={r.release}>
+                    {r.release}
+                  </span>
+                  <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                    <span>{r.language ? languageName(r.language, i18n.language) : '—'}</span>
+                    <span>{t('opensubtitles.downloads', { count: r.downloads })}</span>
+                    {r.hashMatch ? (
+                      <Badge tone="success">{t('opensubtitles.badge.hashMatch')}</Badge>
+                    ) : null}
+                    {check?.risks.map((risk, i) => (
+                      <Badge
+                        key={risk}
+                        tone={risk === 'fps-mismatch' ? 'warning' : 'muted'}
+                        title={syncMessages(check, 'long')[i]}
+                      >
+                        {short[i]}
+                      </Badge>
+                    ))}
+                    {r.trusted ? (
+                      <Badge tone="primary">{t('opensubtitles.badge.trusted')}</Badge>
+                    ) : null}
+                    {r.hearingImpaired ? (
+                      <Badge>{t('opensubtitles.badge.hearingImpaired')}</Badge>
+                    ) : null}
+                    {r.machineTranslated ? (
+                      <Badge tone="warning">{t('opensubtitles.badge.machine')}</Badge>
+                    ) : null}
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  disabled={download.isPending}
+                  onClick={() => pick(r)}
+                  aria-label={t('opensubtitles.useNamed', { name: r.release })}
+                >
+                  <Download />
+                  {download.isPending && download.variables === r.fileId
+                    ? t('opensubtitles.downloading')
+                    : t('opensubtitles.use')}
+                </Button>
+              </li>
+            )
+          })}
         </ul>
       )}
 

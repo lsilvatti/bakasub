@@ -21,6 +21,8 @@ export interface SubtitleTrack {
 export interface MkvInfo {
   readonly subtitles: readonly SubtitleTrack[]
   readonly attachments: number
+  /** fps da primeira faixa de vídeo (`default_duration`); ausente quando o container não informa. */
+  readonly videoFps?: number
 }
 
 const CODECS: Readonly<Record<string, SubtitleFormatId>> = {
@@ -47,7 +49,9 @@ const Identify = z.looseObject({
             track_name: z.string().optional(),
             default_track: z.boolean().optional(),
             forced_track: z.boolean().optional(),
-            num_index_entries: z.number().optional()
+            num_index_entries: z.number().optional(),
+            /** Duração de um quadro, em nanossegundos (faixas de vídeo). */
+            default_duration: z.number().optional()
           })
           .optional()
       })
@@ -81,5 +85,19 @@ export function parseIdentify(json: unknown): MkvInfo {
         ...(p.num_index_entries !== undefined ? { eventCount: p.num_index_entries } : {})
       } as SubtitleTrack
     })
-  return { subtitles, attachments: id.attachments?.length ?? 0 }
+  const videoFps = frameRate(
+    id.tracks.find((t) => t.type === 'video')?.properties?.default_duration
+  )
+  return {
+    subtitles,
+    attachments: id.attachments?.length ?? 0,
+    ...(videoFps !== undefined ? { videoFps } : {})
+  }
+}
+
+/** ns por quadro -> fps com 3 casas (41708333 -> 23.976); `undefined` se ausente ou absurdo. */
+function frameRate(defaultDuration: number | undefined): number | undefined {
+  if (defaultDuration === undefined || !(defaultDuration > 0)) return undefined
+  const fps = Math.round((1e9 / defaultDuration) * 1000) / 1000
+  return fps > 0 && fps <= 1000 ? fps : undefined
 }

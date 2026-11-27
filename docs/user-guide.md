@@ -44,7 +44,8 @@ Your wizard state survives switching pages. Closing the app does not lose jobs: 
 
 The search needs your own free OpenSubtitles API key (Settings → Keys; the in-app guide shows how to get one, and the search dialog asks for it the first time). It starts on its own from the file: a fingerprint of the video plus the title, season and episode read from the file name. You can change the title, numbers and languages and search again.
 
-- **Made for this file** marks subtitles made for this exact video file: their timing matches. Other results match by title and may be out of sync; BakaSub does not adjust timing.
+- **Made for this file** marks subtitles made for this exact video file: their timing matches. Other results match by title and are marked **Not verified for this file**: they may be out of sync; BakaSub does not adjust timing.
+- When a result was timed for another frame rate than the video (for example 25 fps against 23.976 fps), it is flagged in orange: its lines will drift. The warning is repeated under the chosen subtitle, in the summary and in the review before translating. It never stops you from going on.
 - **Machine translated** results are a poor source to translate from.
 - Downloads are limited per day by OpenSubtitles (searching is not). Signing in to your OpenSubtitles account in Settings → Keys raises the limit. A subtitle already downloaded is kept and costs nothing to pick again.
 

@@ -833,6 +833,18 @@ export const common = {
       'Subtitles marked "Made for this file" match this exact video. The others may be out of sync; BakaSub does not adjust timing.',
     quotaNote:
       'Downloads are limited per day. Connect your OpenSubtitles account in Settings for a bigger limit.',
+    sync: {
+      short: {
+        'fps-mismatch': '{{subtitle}} fps ≠ video {{video}} fps',
+        'no-hash-match': 'Not verified for this file'
+      },
+      long: {
+        'fps-mismatch':
+          'This subtitle was timed for {{subtitle}} fps, but the video runs at {{video}} fps: the lines will drift out of sync, and translating will not fix it.',
+        'no-hash-match':
+          'OpenSubtitles could not confirm this subtitle was made for this exact file, so it may be out of sync. Check it before paying for the translation.'
+      }
+    },
     remaining_one: '{{count}} OpenSubtitles download left today',
     remaining_other: '{{count}} OpenSubtitles downloads left today'
   },

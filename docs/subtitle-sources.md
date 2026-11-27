@@ -108,7 +108,16 @@ Concurrent calls for the same file id share one download: one `/download` reques
 
 ## Known limits
 
-BakaSub does not adjust timing. A result without a hash match may be out of sync with the video, and the UI warns about it.
+BakaSub does not adjust timing. It only warns, before the (paid) translation, when a pick may be out of sync.
+
+## Sync warning
+
+`src/shared/subtitle-sync.ts` holds the pure rule, shared by every screen:
+
+- `fps-mismatch`: the result's `fps` and the video's `MediaProbe.videoFps` differ by more than `FPS_TOLERANCE` (0.01, so 23.976 and 23.98 are equal). The video's frame rate comes from `default_duration` (ns per frame) of the first video track in `mkvmerge -J`. When either side has no frame rate (or an invalid one), this risk is never raised.
+- `no-hash-match`: OpenSubtitles did not confirm the subtitle by the video hash.
+
+The warning never blocks. It shows as badges on each search result (a mismatch in the warning tone, an unverified hash as a neutral note), under the picked subtitle, on the summary row of the track step and on the preflight review of the job. A file the user picked from disk carries no `match` data and gets no warning.
 
 Batch mode does not use external sources.
 

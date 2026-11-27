@@ -16,6 +16,7 @@ export function WizardSummary({
   model,
   targetLang,
   track,
+  syncWarn,
   media,
   existing,
   outputNames,
@@ -27,6 +28,8 @@ export function WizardSummary({
   model: string | null
   targetLang: string | null
   track: SubtitleTrackInfo | undefined
+  /** External subtitle that may be out of sync with the video. */
+  syncWarn?: string
   media: MediaContextLookup | undefined
   existing: ExistingTarget | null
   /** Files the job will write (the subtitle path, with the output folder). */
@@ -52,7 +55,8 @@ export function WizardSummary({
             ]
               .filter(Boolean)
               .join(' · ')
-          : null
+          : null,
+      ...(state.subtitle && syncWarn ? { warn: syncWarn } : {})
     },
     {
       step: 'preset',

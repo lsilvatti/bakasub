@@ -50,7 +50,8 @@ export function JobDetail({
   onAnother,
   onRemoved,
   showQueueLink = false,
-  inspectPath
+  inspectPath,
+  preflightNotice
 }: {
   id: string
   /** Wizard: "Translate/Extract/Mux another…" once the job is over (label follows `job.kind`). */
@@ -59,6 +60,8 @@ export function JobDetail({
   showQueueLink?: boolean
   /** Wizard: the subtitle file behind the job, for the encoding and parser check. */
   inspectPath?: string
+  /** Wizard: a non-blocking notice shown in the review (e.g. a subtitle that may be out of sync). */
+  preflightNotice?: React.ReactNode
 }): React.JSX.Element {
   const { t, i18n } = useTranslation()
   const query = useJob(id)
@@ -144,6 +147,7 @@ export function JobDetail({
               estimate={preflight.data.estimate}
               coverage={preflight.data.coverage}
               inspectPath={inspectPath}
+              notice={preflightNotice}
               prompt={preflight.data.prompt ?? null}
             />
             <MemoryOption value={job.memory ?? 'use'} onChange={changeMemory} disabled={busy} />
