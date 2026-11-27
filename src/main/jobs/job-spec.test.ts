@@ -395,15 +395,35 @@ describe('resolveJobSpec: pipeline with an external subtitle', () => {
 
   it('requires exactly one of trackId and subtitle', async () => {
     const source = join(dir, 'ep01.mkv')
-    await expect(resolveJobSpec({ ...base, source }, presets)).rejects.toMatchObject({
-      code: 'INVALID_INPUT'
-    })
+    const error = {
+      code: 'INVALID_INPUT',
+      message: 'Exactly one of trackId and subtitle is required'
+    }
+    // Zero origens.
+    await expect(resolveJobSpec({ ...base, source }, presets)).rejects.toMatchObject(error)
+    // Duas origens.
     await expect(
       resolveJobSpec(
         { ...base, source, trackId: 2, subtitle: { path: join(dir, 'ep01.en.srt') } },
         presets
       )
-    ).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+    ).rejects.toMatchObject(error)
+    // Duas origens com legenda inexistente: a checagem vem antes de tocar no disco.
+    await expect(
+      resolveJobSpec(
+        { ...base, source, trackId: 2, subtitle: { path: join(dir, 'nope.srt') } },
+        presets
+      )
+    ).rejects.toMatchObject(error)
+  })
+
+  it('trackId 0 is a valid single origin (no truthiness check)', async () => {
+    const spec = await resolveJobSpec(
+      { ...base, source: join(dir, 'ep01.mkv'), trackId: 0 },
+      presets
+    )
+    expect(spec).toMatchObject({ kind: 'pipeline', trackId: 0 })
+    expect(spec).not.toHaveProperty('externalSubtitle')
   })
 
   it('the external subtitle goes through the same path guard (extension, existence)', async () => {

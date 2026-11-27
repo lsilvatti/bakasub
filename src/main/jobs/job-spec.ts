@@ -363,8 +363,6 @@ export async function resolveJobSpec(
       }
     }
     case 'pipeline': {
-      if ((req.trackId === undefined) === (req.subtitle === undefined))
-        throw new AppError('INVALID_INPUT', 'Exactly one of trackId and subtitle is required')
       const origin = await pipelineOrigin(req)
       const { preset, targetLang } = await resolvePreset(req, presets)
       return {
@@ -394,8 +392,15 @@ async function pipelineOrigin(
   spec: { trackId: number } | { externalSubtitle: ExternalSubtitleSpec }
   sourceLang?: string
 }> {
-  if (!req.subtitle) return { spec: { trackId: req.trackId! } }
-  const f = await validateInputFile(req.subtitle.path, SUBTITLE_EXTENSIONS, MAX_SUBTITLE_BYTES)
+  // Exatamente uma origem: o retorno é a união discriminada, então o invariante
+  // é garantido pelo narrowing aqui (sem `!`) e checado antes de tocar no disco.
+  const { trackId, subtitle } = req
+  if (subtitle === undefined) {
+    if (trackId === undefined) throw exactlyOneOrigin()
+    return { spec: { trackId } }
+  }
+  if (trackId !== undefined) throw exactlyOneOrigin()
+  const f = await validateInputFile(subtitle.path, SUBTITLE_EXTENSIONS, MAX_SUBTITLE_BYTES)
   const mode = req.options?.outputMode ?? (req.options?.alsoWriteSubtitle ? 'both' : 'mux')
   return {
     spec: {
@@ -406,9 +411,12 @@ async function pipelineOrigin(
         includeInMux: mode !== 'subtitle' && (req.options?.includeSourceSubtitle ?? false)
       }
     },
-    sourceLang: optionalLang(req.subtitle.language) ?? langFromFilename(f.path)
+    sourceLang: optionalLang(subtitle.language) ?? langFromFilename(f.path)
   }
 }
+
+const exactlyOneOrigin = (): AppError =>
+  new AppError('INVALID_INPUT', 'Exactly one of trackId and subtitle is required')
 
 const overwrite = (v: boolean | undefined): { overwrite?: true } => (v ? { overwrite: true } : {})
 
